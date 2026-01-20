@@ -1,5 +1,6 @@
 #include "TransferManager.h"
 #include <QDir>
+#include <QDirIterator>
 #include <QFileInfo>
 
 namespace Witra {

@@ -4,6 +4,7 @@
 #include <QFontDatabase>
 #include <QSettings>
 #include <QDir>
+#include <QIcon>
 
 #include "ui/MainWindow.h"
 
@@ -21,6 +22,9 @@ int main(int argc, char *argv[])
     app.setOrganizationName("Witra");
     app.setOrganizationDomain("witra.app");
     app.setApplicationVersion("1.0.0");
+    
+    // Set application icon
+    app.setWindowIcon(QIcon(":/icons/app.svg"));
     
     // Set default font
     QFont defaultFont("Segoe UI", 10);

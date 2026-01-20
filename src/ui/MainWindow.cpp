@@ -28,6 +28,11 @@ MainWindow::MainWindow(QWidget* parent)
     , m_transferPage(nullptr)
     , m_trayIcon(nullptr)
 {
+    // Set application icon
+    QIcon appIcon(":/icons/app.svg");
+    setWindowIcon(appIcon);
+    qApp->setWindowIcon(appIcon);
+    
     setupUi();
     setupTrayIcon();
     applyStyles();
@@ -201,7 +206,7 @@ void MainWindow::setupUi()
 void MainWindow::setupTrayIcon()
 {
     m_trayIcon = new QSystemTrayIcon(this);
-    m_trayIcon->setIcon(QIcon(":/icons/app.png"));
+    m_trayIcon->setIcon(QIcon(":/icons/app.svg"));
     m_trayIcon->setToolTip("Witra - Wireless Transfer");
     
     QMenu* trayMenu = new QMenu(this);

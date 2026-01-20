@@ -1,5 +1,6 @@
 #include "TransferSession.h"
 #include <QDir>
+#include <QDirIterator>
 #include <QFileInfo>
 #include <QTimer>
 

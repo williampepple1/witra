@@ -1,6 +1,7 @@
 <!DOCTYPE RCC>
 <RCC version="1.0">
     <qresource prefix="/">
+        <file>icons/app.svg</file>
         <file>styles/main.qss</file>
     </qresource>
 </RCC>
