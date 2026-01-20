@@ -1,19 +1,47 @@
-#include <QCoreApplication>
+#include <QApplication>
+#include <QFile>
+#include <QFont>
+#include <QFontDatabase>
+#include <QSettings>
+#include <QDir>
+
+#include "ui/MainWindow.h"
 
 int main(int argc, char *argv[])
 {
-    QCoreApplication a(argc, argv);
-
-    // Set up code that uses the Qt event loop here.
-    // Call a.quit() or a.exit() to quit the application.
-    // A not very useful example would be including
-    // #include <QTimer>
-    // near the top of the file and calling
-    // QTimer::singleShot(5000, &a, &QCoreApplication::quit);
-    // which quits the application after 5 seconds.
-
-    // If you do not need a running Qt event loop, remove the call
-    // to a.exec() or use the Non-Qt Plain C++ Application template.
-
-    return a.exec();
+    // Enable high DPI scaling
+    QApplication::setHighDpiScaleFactorRoundingPolicy(
+        Qt::HighDpiScaleFactorRoundingPolicy::PassThrough);
+    
+    QApplication app(argc, argv);
+    
+    // Application metadata
+    app.setApplicationName("Witra");
+    app.setApplicationDisplayName("Witra - Wireless Transfer");
+    app.setOrganizationName("Witra");
+    app.setOrganizationDomain("witra.app");
+    app.setApplicationVersion("1.0.0");
+    
+    // Set default font
+    QFont defaultFont("Segoe UI", 10);
+    defaultFont.setStyleStrategy(QFont::PreferAntialias);
+    app.setFont(defaultFont);
+    
+    // Load global stylesheet
+    QFile styleFile(":/styles/main.qss");
+    if (styleFile.open(QFile::ReadOnly | QFile::Text)) {
+        QString style = styleFile.readAll();
+        app.setStyleSheet(style);
+        styleFile.close();
+    }
+    
+    // Ensure download directory exists
+    QString downloadPath = QDir::homePath() + "/Downloads/Witra";
+    QDir().mkpath(downloadPath);
+    
+    // Create and show main window
+    Witra::MainWindow mainWindow;
+    mainWindow.show();
+    
+    return app.exec();
 }
