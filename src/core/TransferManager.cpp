@@ -106,6 +106,53 @@ void TransferManager::rejectConnectionRequest(TransferSession* session)
     }
 }
 
+void TransferManager::disconnectFromPeer(Peer* peer)
+{
+    if (!peer) return;
+    
+    // Check for active transfers first
+    if (hasActiveTransfersWithPeer(peer->id())) {
+        emit error(tr("Cannot disconnect while transfers are in progress"));
+        return;
+    }
+    
+    // Find and close any sessions with this peer
+    QString peerId = peer->id();
+    
+    // Close client sessions
+    TransferSession* clientSession = m_client->sessionByPeerId(peerId);
+    if (clientSession) {
+        clientSession->disconnectFromPeer();
+    }
+    
+    // Close server sessions
+    for (TransferSession* session : m_server->sessions()) {
+        if (session->peerId() == peerId) {
+            session->disconnectFromPeer();
+        }
+    }
+    
+    // Remove from pending requests
+    m_pendingRequests.remove(peerId);
+    
+    // Update peer state
+    peer->setState(Peer::ConnectionState::Discovered);
+}
+
+bool TransferManager::hasActiveTransfersWithPeer(const QString& peerId) const
+{
+    for (TransferItem* item : m_transfers.values()) {
+        if (item->peerId() == peerId) {
+            TransferItem::Status status = item->status();
+            if (status == TransferItem::Status::Pending || 
+                status == TransferItem::Status::InProgress) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 void TransferManager::sendFiles(Peer* peer, const QStringList& filePaths)
 {
     if (!peer || !peer->isConnected()) return;

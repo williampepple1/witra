@@ -4,6 +4,8 @@
 #include <QVBoxLayout>
 #include <QFileDialog>
 #include <QStyle>
+#include <QTimer>
+#include <QMessageBox>
 
 namespace Witra {
 
@@ -20,13 +22,20 @@ PeerWidget::PeerWidget(Peer* peer, TransferManager* transferManager, QWidget* pa
     , m_rejectButton(nullptr)
     , m_sendFilesButton(nullptr)
     , m_sendFolderButton(nullptr)
+    , m_disconnectButton(nullptr)
     , m_actionContainer(nullptr)
+    , m_disconnectUpdateTimer(nullptr)
 {
     setupUi();
     applyStyles();
     updateDisplay();
     
     connect(m_peer, &Peer::stateChanged, this, &PeerWidget::updateDisplay);
+    
+    // Timer to update disconnect button state based on active transfers
+    m_disconnectUpdateTimer = new QTimer(this);
+    connect(m_disconnectUpdateTimer, &QTimer::timeout, this, &PeerWidget::updateDisconnectButton);
+    m_disconnectUpdateTimer->start(1000);
 }
 
 void PeerWidget::setupUi()
@@ -104,6 +113,12 @@ void PeerWidget::setupUi()
     m_sendFolderButton->setObjectName("sendButton");
     connect(m_sendFolderButton, &QPushButton::clicked, this, &PeerWidget::onSendFolderClicked);
     actionLayout->addWidget(m_sendFolderButton);
+    
+    // Disconnect button (when connected and no active transfers)
+    m_disconnectButton = new QPushButton("Disconnect");
+    m_disconnectButton->setObjectName("disconnectButton");
+    connect(m_disconnectButton, &QPushButton::clicked, this, &PeerWidget::onDisconnectClicked);
+    actionLayout->addWidget(m_disconnectButton);
     
     mainLayout->addWidget(m_actionContainer);
 }
@@ -215,6 +230,27 @@ void PeerWidget::applyStyles()
         #sendButton:hover {
             background-color: #2EA043;
         }
+        
+        #disconnectButton {
+            background-color: transparent;
+            border: 1px solid #F85149;
+            border-radius: 8px;
+            padding: 8px 16px;
+            font-family: 'Segoe UI', sans-serif;
+            font-size: 13px;
+            font-weight: 500;
+            color: #F85149;
+        }
+        
+        #disconnectButton:hover {
+            background-color: #F85149;
+            color: white;
+        }
+        
+        #disconnectButton:disabled {
+            border-color: #484F58;
+            color: #484F58;
+        }
     )");
 }
 
@@ -260,6 +296,10 @@ void PeerWidget::updateDisplay()
     m_rejectButton->setVisible(state == Peer::ConnectionState::RequestReceived);
     m_sendFilesButton->setVisible(state == Peer::ConnectionState::Connected);
     m_sendFolderButton->setVisible(state == Peer::ConnectionState::Connected);
+    m_disconnectButton->setVisible(state == Peer::ConnectionState::Connected);
+    
+    // Update disconnect button state
+    updateDisconnectButton();
     
     if (state == Peer::ConnectionState::RequestSent) {
         m_connectButton->setVisible(true);
@@ -342,6 +382,32 @@ void PeerWidget::onSendFolderClicked()
     
     if (!folder.isEmpty()) {
         m_transferManager->sendFolder(m_peer, folder);
+    }
+}
+
+void PeerWidget::onDisconnectClicked()
+{
+    if (m_transferManager->hasActiveTransfersWithPeer(m_peer->id())) {
+        QMessageBox::warning(this, tr("Cannot Disconnect"),
+            tr("Cannot disconnect while file transfers are in progress.\n"
+               "Please wait for transfers to complete or cancel them first."));
+        return;
+    }
+    
+    m_transferManager->disconnectFromPeer(m_peer);
+}
+
+void PeerWidget::updateDisconnectButton()
+{
+    if (!m_disconnectButton->isVisible()) return;
+    
+    bool hasActiveTransfers = m_transferManager->hasActiveTransfersWithPeer(m_peer->id());
+    m_disconnectButton->setEnabled(!hasActiveTransfers);
+    
+    if (hasActiveTransfers) {
+        m_disconnectButton->setToolTip(tr("Cannot disconnect while transfers are in progress"));
+    } else {
+        m_disconnectButton->setToolTip(tr("Disconnect from this device"));
     }
 }
 

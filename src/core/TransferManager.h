@@ -33,6 +33,8 @@ public:
     void sendConnectionRequest(Peer* peer);
     void acceptConnectionRequest(TransferSession* session);
     void rejectConnectionRequest(TransferSession* session);
+    void disconnectFromPeer(Peer* peer);
+    bool hasActiveTransfersWithPeer(const QString& peerId) const;
     
     // File operations
     void sendFiles(Peer* peer, const QStringList& filePaths);

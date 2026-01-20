@@ -25,6 +25,8 @@ private slots:
     void onRejectClicked();
     void onSendFilesClicked();
     void onSendFolderClicked();
+    void onDisconnectClicked();
+    void updateDisconnectButton();
     
 private:
     void setupUi();
@@ -45,8 +47,10 @@ private:
     QPushButton* m_rejectButton;
     QPushButton* m_sendFilesButton;
     QPushButton* m_sendFolderButton;
+    QPushButton* m_disconnectButton;
     
     QWidget* m_actionContainer;
+    QTimer* m_disconnectUpdateTimer;
     QStringList m_pendingFiles;
 };
 
