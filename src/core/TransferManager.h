@@ -54,6 +54,7 @@ private slots:
     void onConnectionRequestReceived(TransferSession* session, const QString& senderName);
     void onOutgoingConnectionReady(TransferSession* session);
     void onOutgoingConnectionFailed(const QString& error);
+    void onSessionDisconnected(TransferSession* session);
     void onSessionTransferStarted(const QString& transferId, const QString& fileName,
                                   qint64 totalSize, qint64 totalFiles);
     void onSessionTransferProgress(const QString& transferId, qint64 received, qint64 total);
@@ -63,6 +64,7 @@ private slots:
 private:
     void setupSessionConnections(TransferSession* session);
     TransferSession* getOrCreateSession(Peer* peer);
+    void updatePeerStateOnDisconnect(const QString& peerId);
     
     PeerManager* m_peerManager;
     FileTransferServer* m_server;

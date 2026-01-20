@@ -20,6 +20,11 @@ TransferManager::TransferManager(PeerManager* peerManager, QObject* parent)
             this, &TransferManager::onConnectionRequestReceived);
     connect(m_server, &FileTransferServer::error,
             this, &TransferManager::error);
+    connect(m_server, &FileTransferServer::newConnection,
+            this, [this](TransferSession* session) {
+        connect(session, &TransferSession::disconnected,
+                this, [this, session]() { onSessionDisconnected(session); });
+    });
     
     // Client signals
     connect(m_client, &FileTransferClient::connected,
@@ -297,6 +302,8 @@ void TransferManager::setupSessionConnections(TransferSession* session)
             this, &TransferManager::onSessionTransferCompleted);
     connect(session, &TransferSession::transferFailed,
             this, &TransferManager::onSessionTransferFailed);
+    connect(session, &TransferSession::disconnected,
+            this, [this, session]() { onSessionDisconnected(session); });
 }
 
 void TransferManager::onSessionTransferStarted(const QString& transferId, 
@@ -364,6 +371,67 @@ TransferSession* TransferManager::getOrCreateSession(Peer* peer)
     
     // Create new connection
     return m_client->connectToPeer(peer->address(), peer->port());
+}
+
+void TransferManager::onSessionDisconnected(TransferSession* session)
+{
+    if (!session) return;
+    
+    QString peerId = session->peerId();
+    if (!peerId.isEmpty()) {
+        updatePeerStateOnDisconnect(peerId);
+    }
+    
+    // Remove from pending requests
+    m_pendingRequests.remove(peerId);
+    
+    // Mark any active transfers with this peer as failed
+    for (TransferItem* item : m_transfers.values()) {
+        if (item->peerId() == peerId) {
+            if (item->status() == TransferItem::Status::InProgress ||
+                item->status() == TransferItem::Status::Pending) {
+                item->setStatus(TransferItem::Status::Failed);
+                item->setErrorMessage(tr("Connection lost"));
+                emit transferUpdated(item);
+            }
+        }
+    }
+}
+
+void TransferManager::updatePeerStateOnDisconnect(const QString& peerId)
+{
+    Peer* peer = m_peerManager->peer(peerId);
+    if (!peer) return;
+    
+    // Only update if currently connected or in a connection process
+    if (peer->state() == Peer::ConnectionState::Connected ||
+        peer->state() == Peer::ConnectionState::RequestSent ||
+        peer->state() == Peer::ConnectionState::RequestReceived) {
+        
+        // Check if there are any remaining sessions with this peer
+        bool hasOtherSessions = false;
+        
+        for (TransferSession* s : m_client->sessions()) {
+            if (s->peerId() == peerId) {
+                hasOtherSessions = true;
+                break;
+            }
+        }
+        
+        if (!hasOtherSessions) {
+            for (TransferSession* s : m_server->sessions()) {
+                if (s->peerId() == peerId) {
+                    hasOtherSessions = true;
+                    break;
+                }
+            }
+        }
+        
+        // If no more sessions, revert to Discovered state
+        if (!hasOtherSessions) {
+            peer->setState(Peer::ConnectionState::Discovered);
+        }
+    }
 }
 
 } // namespace Witra
