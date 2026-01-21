@@ -77,15 +77,21 @@ set(RESOURCES
     resources/resources.qrc
 )
 
+# Windows resource file (for app icon in taskbar/explorer)
+if(WIN32)
+    set(WIN_RESOURCES resources/app.rc)
+endif()
+
 # Create executable
 if(WIN32)
     add_executable(witra WIN32
         ${SOURCES}
         ${HEADERS}
         ${RESOURCES}
+        ${WIN_RESOURCES}
     )
 else()
-    add_executable(witra
+add_executable(witra
         ${SOURCES}
         ${HEADERS}
         ${RESOURCES}
