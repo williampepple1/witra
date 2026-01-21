@@ -1,7 +1,7 @@
 ; Witra Installer Script for Inno Setup
 
 #define MyAppName "Witra"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.1.0"
 #define MyAppPublisher "Witra"
 #define MyAppURL "https://github.com/witra"
 #define MyAppExeName "witra.exe"
@@ -30,6 +30,8 @@ WizardSizePercent=120
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
+; App info page
+InfoBeforeFile=resources\app-info.txt
 ; Branding
 AppComments={#MyAppDescription}
 AppContact=support@witra.app
@@ -42,7 +44,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Messages]
 WelcomeLabel1=Welcome to [name] Setup
-WelcomeLabel2=This will install [name/ver] on your computer.%n%n[name] lets you transfer files and folders between computers connected to the same WiFi network - fast, secure, and without internet.%n%nFeatures:%n  • Automatic device discovery on your network%n  • Send files and folders of any size%n  • Drag and drop support%n  • Real-time transfer progress%n%nClick Next to continue.
+WelcomeLabel2=This will install [name/ver] on your computer.%n%n[name] is a wireless file transfer application that lets you send files and folders between computers on the same WiFi network.%n%nClick Next to read more about the application, or click Cancel to exit Setup.
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription: "Additional shortcuts:"; Flags: unchecked

@@ -1,0 +1,55 @@
+╔══════════════════════════════════════════════════════════════════╗
+║                    WITRA - WIRELESS TRANSFER                     ║
+║                         Version 1.1.0                            ║
+╚══════════════════════════════════════════════════════════════════╝
+
+WHAT IS WITRA?
+══════════════
+Witra is a desktop application that lets you transfer files and 
+folders between computers connected to the same WiFi network.
+
+No internet required - transfers happen directly between devices
+on your local network, making it fast, private, and secure.
+
+
+HOW IT WORKS
+════════════
+1. Install Witra on both computers
+2. Connect both computers to the same WiFi network
+3. Open Witra - devices will automatically discover each other
+4. Click "Connect" to pair with another device
+5. Send files or folders with a single click
+
+
+KEY FEATURES
+════════════
+  ✓ Automatic Device Discovery
+    Finds other Witra users on your network instantly
+
+  ✓ Fast Local Transfers  
+    Files transfer directly over WiFi - no cloud upload needed
+
+  ✓ Send Any File Size
+    No limits - send small documents or huge video files
+
+  ✓ Folder Support
+    Send entire folders while preserving structure
+
+  ✓ Drag & Drop
+    Simply drag files onto the window to send
+
+  ✓ Real-Time Progress
+    See transfer speed and estimated time remaining
+
+  ✓ System Tray
+    Runs quietly in the background
+
+
+REQUIREMENTS
+════════════
+  • Windows 10 or later (64-bit)
+  • WiFi network connection
+  • Another device running Witra on the same network
+
+
+Click "Next" to continue with the installation.
