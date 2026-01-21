@@ -2,6 +2,8 @@
 #include <QDir>
 #include <QDirIterator>
 #include <QFileInfo>
+#include <QSettings>
+#include <QStandardPaths>
 
 namespace Witra {
 
@@ -12,7 +14,16 @@ TransferManager::TransferManager(PeerManager* peerManager, QObject* parent)
     , m_client(new FileTransferClient(this))
     , m_running(false)
 {
-    m_downloadPath = QDir::homePath() + "/Downloads/Witra";
+    // Load download path from settings (set by installer or user)
+    QSettings settings;
+    QString defaultPath = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation) + "/Witra Downloads";
+    m_downloadPath = settings.value("DownloadPath", defaultPath).toString();
+    
+    // Fallback if path is empty
+    if (m_downloadPath.isEmpty()) {
+        m_downloadPath = QDir::homePath() + "/Downloads/Witra";
+    }
+    
     QDir().mkpath(m_downloadPath);
     
     // Server signals
