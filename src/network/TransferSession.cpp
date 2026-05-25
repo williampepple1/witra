@@ -93,8 +93,7 @@ void TransferSession::sendFile(const QString& filePath, const QString& transferI
     }
     
     if (m_sendFile) {
-        m_sendFile->close();
-        delete m_sendFile;
+        return;
     }
     
     m_sendFile = new QFile(filePath, this);
@@ -110,12 +109,9 @@ void TransferSession::sendFile(const QString& filePath, const QString& transferI
     m_sendBytesSent = 0;
     
     QCryptographicHash fileHash(QCryptographicHash::Sha256);
-    if (m_sendFile->isOpen()) {
-        fileHash.addData(m_sendFile);
-        m_sendFile->reset();
-    }
+    fileHash.addData(m_sendFile);
+    m_sendFile->reset();
     
-    // Send file header
     TransferHeader header;
     header.type = TransferType::FILE_HEADER;
     header.transferId = transferId;
@@ -129,7 +125,6 @@ void TransferSession::sendFile(const QString& filePath, const QString& transferI
     sendHeader(header);
     m_state = State::Transferring;
     
-    // Start sending chunks
     QTimer::singleShot(0, this, &TransferSession::sendNextChunk);
 }
 
@@ -141,7 +136,6 @@ void TransferSession::sendFolder(const QString& folderPath, const QString& trans
         return;
     }
     
-    // Collect all files recursively
     QStringList files;
     QDirIterator it(folderPath, QDir::Files, QDirIterator::Subdirectories);
     while (it.hasNext()) {
@@ -153,7 +147,6 @@ void TransferSession::sendFolder(const QString& folderPath, const QString& trans
         return;
     }
     
-    // Send folder header
     TransferHeader header;
     header.type = TransferType::FOLDER_HEADER;
     header.transferId = transferId;
@@ -162,13 +155,29 @@ void TransferSession::sendFolder(const QString& folderPath, const QString& trans
     
     sendHeader(header);
     
-    // Send each file
-    QString basePath = QFileInfo(folderPath).absolutePath();
-    for (qint64 i = 0; i < files.size(); ++i) {
-        QString relativePath = dir.dirName() + "/" + 
-                              QDir(folderPath).relativeFilePath(files[i]);
-        sendFile(files[i], transferId, relativePath, files.size(), i + 1);
-    }
+    m_pendingSendFiles = files;
+    m_pendingFolderTransferId = transferId;
+    m_pendingFolderBasePath = folderPath;
+    m_pendingFileIndex = 0;
+    
+    sendNextQueuedFile();
+}
+
+void TransferSession::sendNextQueuedFile()
+{
+    if (m_pendingSendFiles.isEmpty()) return;
+    
+    QString filePath = m_pendingSendFiles.takeFirst();
+    m_pendingFileIndex++;
+    
+    QDir dir(m_pendingFolderBasePath);
+    QString relativePath = dir.dirName() + "/" + 
+                          QDir(m_pendingFolderBasePath).relativeFilePath(filePath);
+    
+    QString fileTransferId = m_pendingFolderTransferId + "/" + QString::number(m_pendingFileIndex);
+    
+    sendFile(filePath, fileTransferId, relativePath,
+             m_pendingSendFiles.size() + 1, m_pendingFileIndex);
 }
 
 void TransferSession::cancelTransfer()
@@ -228,7 +237,6 @@ void TransferSession::sendNextChunk()
     
     QByteArray chunk = m_sendFile->read(CHUNK_SIZE);
     if (chunk.isEmpty()) {
-        // File complete
         TransferHeader header;
         header.type = TransferType::FILE_COMPLETE;
         header.transferId = m_sendTransferId;
@@ -237,6 +245,11 @@ void TransferSession::sendNextChunk()
         m_sendFile->close();
         delete m_sendFile;
         m_sendFile = nullptr;
+        
+        if (!m_pendingSendFiles.isEmpty()) {
+            QTimer::singleShot(0, this, &TransferSession::sendNextQueuedFile);
+            return;
+        }
         
         emit transferCompleted(m_sendTransferId);
         m_state = State::Completed;
@@ -265,6 +278,7 @@ void TransferSession::onReadyRead()
             
             if (m_expectedSize <= 0 || m_expectedSize > MAX_MESSAGE_SIZE) {
                 emit error(tr("Invalid message size received from peer"));
+                m_buffer.clear();
                 m_expectedSize = 0;
                 break;
             }
@@ -445,7 +459,16 @@ void TransferSession::handleFileComplete(const TransferHeader& header)
         
         QByteArray receivedHash = m_runningHash.result();
         
-        if (!m_expectedHash.isEmpty() && receivedHash != m_expectedHash) {
+        if (m_expectedHash.isEmpty()) {
+            emit transferFailed(m_currentTransferId,
+                               tr("File integrity not verified - no hash provided by sender"));
+            m_currentFile->remove();
+            delete m_currentFile;
+            m_currentFile = nullptr;
+            return;
+        }
+        
+        if (receivedHash != m_expectedHash) {
             m_currentFile->remove();
             delete m_currentFile;
             m_currentFile = nullptr;

@@ -214,6 +214,8 @@ void TransferManager::sendFiles(Peer* peer, const QStringList& filePaths)
             m_transfers[transferId] = item;
             emit transferAdded(item);
             
+            m_transferSessions[transferId] = session;
+            
             session->sendFile(filePath, transferId, QString(), 
                              filePaths.size(), i + 1);
         }
@@ -254,6 +256,8 @@ void TransferManager::sendFolder(Peer* peer, const QString& folderPath)
     m_transfers[transferId] = item;
     emit transferAdded(item);
     
+    m_transferSessions[transferId] = session;
+    
     session->sendFolder(folderPath, transferId);
 }
 
@@ -265,12 +269,9 @@ void TransferManager::cancelTransfer(const QString& transferId)
     item->setStatus(TransferItem::Status::Cancelled);
     emit transferUpdated(item);
     
-    // Find session and cancel
-    for (TransferSession* session : m_server->sessions()) {
-        session->cancelTransfer();
-    }
-    for (TransferSession* session : m_client->sessions()) {
-        session->cancelTransfer();
+    TransferSession* target = m_transferSessions.value(transferId, nullptr);
+    if (target) {
+        target->cancelTransfer();
     }
 }
 
@@ -301,6 +302,7 @@ void TransferManager::onOutgoingConnectionReady(TransferSession* session)
             peer->setState(Peer::ConnectionState::Connected);
             emit connectionAccepted(peer);
         }
+        m_pendingRequests.remove(session->peerId());
         setupSessionConnections(session);
     });
     
@@ -352,17 +354,6 @@ void TransferManager::onSessionTransferStarted(const QString& transferId,
     emit transferAdded(item);
 }
 
-void TransferManager::onSessionTransferProgress(const QString& transferId,
-                                                 qint64 received, qint64 total)
-{
-    Q_UNUSED(total)
-    TransferItem* item = m_transfers.value(transferId, nullptr);
-    if (item) {
-        item->setTransferredSize(received);
-        emit transferUpdated(item);
-    }
-}
-
 void TransferManager::onSessionTransferCompleted(const QString& transferId)
 {
     TransferItem* item = m_transfers.value(transferId, nullptr);
@@ -370,6 +361,7 @@ void TransferManager::onSessionTransferCompleted(const QString& transferId)
         item->setStatus(TransferItem::Status::Completed);
         emit transferUpdated(item);
     }
+    m_transferSessions.remove(transferId);
 }
 
 void TransferManager::onSessionTransferFailed(const QString& transferId, 
@@ -379,6 +371,18 @@ void TransferManager::onSessionTransferFailed(const QString& transferId,
     if (item) {
         item->setStatus(TransferItem::Status::Failed);
         item->setErrorMessage(error);
+        emit transferUpdated(item);
+    }
+    m_transferSessions.remove(transferId);
+}
+
+void TransferManager::onSessionTransferProgress(const QString& transferId,
+                                                 qint64 received, qint64 total)
+{
+    Q_UNUSED(total)
+    TransferItem* item = m_transfers.value(transferId, nullptr);
+    if (item) {
+        item->setTransferredSize(received);
         emit transferUpdated(item);
     }
 }

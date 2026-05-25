@@ -64,14 +64,14 @@ void TransferPage::setupUi()
         layout->setContentsMargins(20, 16, 20, 16);
         layout->setSpacing(4);
         
-        QLabel* valueLabel = new QLabel(value);
-        valueLabel->setObjectName("statValue");
-        valueLabel->setStyleSheet(QString("color: %1;").arg(color));
+        QLabel* activeValue = new QLabel(value);
+        activeValue->setObjectName("statValue");
+        activeValue->setStyleSheet(QString("color: %1;").arg(color));
         
         QLabel* titleLabel = new QLabel(title);
         titleLabel->setObjectName("statTitle");
         
-        layout->addWidget(valueLabel);
+        layout->addWidget(activeValue);
         layout->addWidget(titleLabel);
         
         return card;
@@ -81,6 +81,10 @@ void TransferPage::setupUi()
     QWidget* completedCard = createStatCard("Completed", "0", "#238636");
     QWidget* failedCard = createStatCard("Failed", "0", "#F85149");
     
+    QLabel* activeValue = activeCard->findChild<QLabel*>("statValue");
+    QLabel* completedValue = completedCard->findChild<QLabel*>("statValue");
+    QLabel* failedValue = failedCard->findChild<QLabel*>("statValue");
+    
     statsLayout->addWidget(activeCard);
     statsLayout->addWidget(completedCard);
     statsLayout->addWidget(failedCard);
@@ -88,7 +92,7 @@ void TransferPage::setupUi()
     
     // Update stats periodically
     QTimer* statsTimer = new QTimer(this);
-    connect(statsTimer, &QTimer::timeout, this, [this, activeCard, completedCard, failedCard]() {
+    connect(statsTimer, &QTimer::timeout, this, [this, activeValue, completedValue, failedValue]() {
         int active = 0, completed = 0, failed = 0;
         
         for (TransferItem* item : m_transferManager->transfers()) {
@@ -107,9 +111,9 @@ void TransferPage::setupUi()
             }
         }
         
-        activeCard->findChild<QLabel*>("statValue")->setText(QString::number(active));
-        completedCard->findChild<QLabel*>("statValue")->setText(QString::number(completed));
-        failedCard->findChild<QLabel*>("statValue")->setText(QString::number(failed));
+        if (activeValue) activeValue->setText(QString::number(active));
+        if (completedValue) completedValue->setText(QString::number(completed));
+        if (failedValue) failedValue->setText(QString::number(failed));
     });
     statsTimer->start(1000);
     

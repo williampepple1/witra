@@ -84,6 +84,7 @@ private slots:
     void onDisconnected();
     void onSocketError(QAbstractSocket::SocketError socketError);
     void sendNextChunk();
+    void sendNextQueuedFile();
     
 private:
     void processMessage(const QByteArray& message);
@@ -131,6 +132,12 @@ private:
     QString m_sendTransferId;
     qint64 m_sendTotalSize;
     qint64 m_sendBytesSent;
+    
+    // Folder send queue
+    QStringList m_pendingSendFiles;
+    QString m_pendingFolderTransferId;
+    QString m_pendingFolderBasePath;
+    qint64 m_pendingFileIndex;
 };
 
 } // namespace Witra

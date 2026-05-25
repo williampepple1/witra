@@ -21,9 +21,19 @@ FileTransferClient::~FileTransferClient()
 
 TransferSession* FileTransferClient::connectToPeer(const QHostAddress& address, quint16 port)
 {
-    QSslSocket* socket = new QSslSocket(this);
-    socket->setPeerVerifyMode(QSslSocket::VerifyNone);
-    socket->setProtocol(QSsl::TlsV1_2OrLater);
+    QTcpSocket* socket;
+    
+    if (QSslSocket::supportsSsl()) {
+        QSslSocket* ssl = new QSslSocket(this);
+        ssl->setPeerVerifyMode(QSslSocket::VerifyNone);
+        ssl->setProtocol(QSsl::TlsV1_2OrLater);
+        connect(ssl, &QSslSocket::sslErrors, ssl, [ssl](const QList<QSslError>&) {
+            ssl->ignoreSslErrors();
+        });
+        socket = ssl;
+    } else {
+        socket = new QTcpSocket(this);
+    }
     
     TransferSession* session = new TransferSession(socket, this);
     session->setIsIncoming(false);
@@ -35,18 +45,31 @@ TransferSession* FileTransferClient::connectToPeer(const QHostAddress& address, 
     connect(session, &TransferSession::disconnected,
             this, &FileTransferClient::onSessionDisconnected);
     
-    connect(socket, &QSslSocket::encrypted, this, [this, session]() {
-        emit connected(session);
-    });
-    
-    connect(socket, &QSslSocket::errorOccurred, this, 
-            [this, session](QAbstractSocket::SocketError) {
-        emit connectionFailed(session->socket()->errorString());
-        m_sessions.remove(session->sessionId());
-        session->deleteLater();
-    });
-    
-    socket->connectToHostEncrypted(address.toString(), port);
+    QSslSocket* sslSocket = qobject_cast<QSslSocket*>(socket);
+    if (sslSocket) {
+        connect(sslSocket, &QSslSocket::encrypted, this, [this, session]() {
+            emit connected(session);
+        });
+        connect(sslSocket, &QSslSocket::errorOccurred, this,
+                [this, session](QAbstractSocket::SocketError) {
+            emit connectionFailed(session->socket()->errorString());
+            m_sessions.remove(session->sessionId());
+            session->deleteLater();
+        });
+        sslSocket->connectToHost(address.toString(), port);
+        sslSocket->startClientEncryption();
+    } else {
+        connect(socket, &QTcpSocket::connected, this, [this, session]() {
+            emit connected(session);
+        });
+        connect(socket, &QTcpSocket::errorOccurred, this,
+                [this, session](QAbstractSocket::SocketError) {
+            emit connectionFailed(session->socket()->errorString());
+            m_sessions.remove(session->sessionId());
+            session->deleteLater();
+        });
+        socket->connectToHost(address.toString(), port);
+    }
     
     return session;
 }

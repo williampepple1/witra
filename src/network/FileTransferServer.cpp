@@ -59,6 +59,7 @@ bool FileTransferServer::start(quint16 port)
 void FileTransferServer::stop()
 {
     m_server->close();
+    m_connectionCount = 0;
     
     for (TransferSession* session : m_sessions.values()) {
         session->disconnectFromPeer();
@@ -92,16 +93,28 @@ void FileTransferServer::onNewConnection()
             continue;
         }
         
-        QTcpSocket* socket = m_server->nextPendingConnection();
+        QTcpSocket* rawSocket = m_server->nextPendingConnection();
+        QTcpSocket* sessionSocket;
         
-        QSslSocket* sslSocket = new QSslSocket(this);
-        sslSocket->setSocketDescriptor(socket->socketDescriptor());
-        socket->deleteLater();
+        if (QSslSocket::supportsSsl() && !m_sslConfig.isNull()) {
+            QSslSocket* sslSocket = new QSslSocket(this);
+            sslSocket->setSocketDescriptor(rawSocket->socketDescriptor());
+            sslSocket->setSslConfiguration(m_sslConfig);
+            connect(sslSocket, &QSslSocket::sslErrors, sslSocket, [sslSocket](const QList<QSslError>&) {
+                sslSocket->ignoreSslErrors();
+            });
+            sslSocket->startServerEncryption();
+            sessionSocket = sslSocket;
+        } else {
+            sessionSocket = rawSocket;
+        }
         
-        sslSocket->setSslConfiguration(m_sslConfig);
-        sslSocket->startServerEncryption();
+        if (sessionSocket != rawSocket) {
+            rawSocket->abort();
+            rawSocket->deleteLater();
+        }
         
-        TransferSession* session = new TransferSession(sslSocket, this);
+        TransferSession* session = new TransferSession(sessionSocket, this);
         session->setIsIncoming(true);
         session->setDownloadPath(m_downloadPath);
         session->setMaxFileSize(m_maxFileSize);

@@ -73,7 +73,8 @@ private:
     FileTransferServer* m_server;
     FileTransferClient* m_client;
     QMap<QString, TransferItem*> m_transfers;
-    QMap<QString, TransferSession*> m_pendingRequests; // peerId -> session
+    QMap<QString, TransferSession*> m_pendingRequests;
+    QMap<QString, TransferSession*> m_transferSessions;
     QString m_downloadPath;
     qint64 m_maxFileSize;
     bool m_running;
