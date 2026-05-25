@@ -22,6 +22,11 @@ constexpr int PEER_TIMEOUT = 10000;
 constexpr qint64 CHUNK_SIZE = 65536; // 64KB chunks for file transfer
 constexpr qint32 MAX_MESSAGE_SIZE = 1048576; // 1MB max incoming message size (prevents memory exhaustion)
 
+// Security limits
+constexpr int MAX_DISPLAY_NAME_LENGTH = 64; // max chars for network-provided display names
+constexpr int MAX_CONNECTIONS = 10; // max concurrent incoming connections
+constexpr int MAX_PORT_RANGE = 100; // ports to try if default is occupied
+
 // Message types for discovery
 namespace DiscoveryType {
     constexpr const char* ANNOUNCE = "announce";

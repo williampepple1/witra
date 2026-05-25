@@ -23,6 +23,7 @@ public:
     
     // Settings
     void setDisplayName(const QString& name);
+    void setTransferPort(quint16 port);
     QString displayName() const { return m_displayName; }
     QString peerId() const { return m_peerId; }
     

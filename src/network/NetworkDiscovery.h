@@ -21,6 +21,7 @@ public:
     bool isRunning() const { return m_running; }
     
     void setDisplayName(const QString& name) { m_displayName = name; }
+    void setTransferPort(quint16 port) { m_transferPort = port; }
     QString displayName() const { return m_displayName; }
     QString peerId() const { return m_peerId; }
     

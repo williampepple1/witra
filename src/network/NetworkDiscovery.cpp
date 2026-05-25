@@ -1,6 +1,7 @@
 #include "NetworkDiscovery.h"
 #include <QNetworkDatagram>
 #include <QHostInfo>
+#include <algorithm>
 
 namespace Witra {
 
@@ -35,11 +36,20 @@ void NetworkDiscovery::start(const QString& peerId, const QString& displayName, 
     m_displayName = displayName;
     m_transferPort = transferPort;
     
-    // Bind to discovery port
-    if (!m_socket->bind(QHostAddress::AnyIPv4, DISCOVERY_PORT, 
-                        QUdpSocket::ShareAddress | QUdpSocket::ReuseAddressHint)) {
-        emit error(tr("Failed to bind to discovery port %1: %2")
-                   .arg(DISCOVERY_PORT).arg(m_socket->errorString()));
+    // Bind to discovery port with fallback
+    bool bound = false;
+    for (int offset = 0; offset < MAX_PORT_RANGE; ++offset) {
+        quint16 port = DISCOVERY_PORT + offset;
+        if (m_socket->bind(QHostAddress::AnyIPv4, port,
+                           QUdpSocket::ShareAddress | QUdpSocket::ReuseAddressHint)) {
+            bound = true;
+            break;
+        }
+    }
+    if (!bound) {
+        emit error(tr("Failed to bind to discovery port (tried %1-%2): %3")
+                   .arg(DISCOVERY_PORT).arg(DISCOVERY_PORT + MAX_PORT_RANGE - 1)
+                   .arg(m_socket->errorString()));
         return;
     }
     
@@ -109,7 +119,9 @@ void NetworkDiscovery::readPendingDatagrams()
         if (msg.peerId == m_peerId) continue;
         
         if (msg.type == DiscoveryType::ANNOUNCE) {
-            emit peerDiscovered(msg.peerId, msg.displayName, msg.deviceName,
+            QString name = msg.displayName.left(MAX_DISPLAY_NAME_LENGTH);
+            QString device = msg.deviceName.left(MAX_DISPLAY_NAME_LENGTH);
+            emit peerDiscovered(msg.peerId, name, device,
                                datagram.senderAddress(), msg.transferPort);
         } else if (msg.type == DiscoveryType::GOODBYE) {
             emit peerGoodbye(msg.peerId);

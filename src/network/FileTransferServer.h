@@ -40,6 +40,7 @@ private:
     QTcpServer* m_server;
     QMap<QString, TransferSession*> m_sessions;
     QString m_downloadPath;
+    int m_connectionCount;
 };
 
 } // namespace Witra

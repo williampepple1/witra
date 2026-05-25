@@ -60,6 +60,8 @@ void TransferManager::start()
         return;
     }
     
+    m_peerManager->setTransferPort(m_server->port());
+    
     m_running = true;
 }
 

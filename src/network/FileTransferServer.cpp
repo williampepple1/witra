@@ -6,6 +6,7 @@ namespace Witra {
 FileTransferServer::FileTransferServer(QObject* parent)
     : QObject(parent)
     , m_server(new QTcpServer(this))
+    , m_connectionCount(0)
 {
     // Default download path
     m_downloadPath = QDir::homePath() + "/Downloads/Witra";
@@ -24,13 +25,17 @@ bool FileTransferServer::start(quint16 port)
 {
     if (m_server->isListening()) return true;
     
-    if (!m_server->listen(QHostAddress::AnyIPv4, port)) {
-        emit error(tr("Failed to start server on port %1: %2")
-                   .arg(port).arg(m_server->errorString()));
-        return false;
+    for (int offset = 0; offset < MAX_PORT_RANGE; ++offset) {
+        quint16 tryPort = port + offset;
+        if (m_server->listen(QHostAddress::AnyIPv4, tryPort)) {
+            return true;
+        }
     }
     
-    return true;
+    emit error(tr("Failed to start server on ports %1-%2: %3")
+               .arg(port).arg(port + MAX_PORT_RANGE - 1)
+               .arg(m_server->errorString()));
+    return false;
 }
 
 void FileTransferServer::stop()
@@ -62,6 +67,13 @@ TransferSession* FileTransferServer::session(const QString& sessionId) const
 void FileTransferServer::onNewConnection()
 {
     while (m_server->hasPendingConnections()) {
+        if (m_connectionCount >= MAX_CONNECTIONS) {
+            QTcpSocket* rejected = m_server->nextPendingConnection();
+            rejected->disconnectFromHost();
+            rejected->deleteLater();
+            continue;
+        }
+        
         QTcpSocket* socket = m_server->nextPendingConnection();
         
         TransferSession* session = new TransferSession(socket, this);
@@ -69,6 +81,7 @@ void FileTransferServer::onNewConnection()
         session->setDownloadPath(m_downloadPath);
         
         m_sessions[session->sessionId()] = session;
+        m_connectionCount++;
         
         connect(session, &TransferSession::disconnected,
                 this, &FileTransferServer::onSessionDisconnected);
@@ -88,6 +101,7 @@ void FileTransferServer::onSessionDisconnected()
     if (session) {
         QString sessionId = session->sessionId();
         m_sessions.remove(sessionId);
+        m_connectionCount--;
         emit sessionClosed(sessionId);
         session->deleteLater();
     }

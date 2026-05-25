@@ -297,10 +297,10 @@ void TransferSession::processMessage(const QByteArray& message)
 
 void TransferSession::handleConnectionRequest(const TransferHeader& header)
 {
-    m_peerName = header.senderName;
+    m_peerName = header.senderName.left(MAX_DISPLAY_NAME_LENGTH);
     m_peerId = header.transferId;
     m_isIncoming = true;
-    emit connectionRequestReceived(header.senderName, header.transferId);
+    emit connectionRequestReceived(m_peerName, header.transferId);
 }
 
 void TransferSession::handleConnectionAccept(const TransferHeader& header)
@@ -370,7 +370,7 @@ void TransferSession::handleFileHeader(const TransferHeader& header)
         delete m_currentFile;
     }
     
-    m_currentFile = new QFile(filePath, this);
+    m_currentFile = new QFile(filePath + ".part", this);
     if (!m_currentFile->open(QIODevice::WriteOnly)) {
         emit transferFailed(m_currentTransferId, 
                            tr("Cannot create file: %1").arg(filePath));
@@ -401,12 +401,15 @@ void TransferSession::handleFileComplete(const TransferHeader& header)
     Q_UNUSED(header)
     
     if (m_currentFile) {
-        QString filePath = m_currentFile->fileName();
+        QString partPath = m_currentFile->fileName();
         m_currentFile->close();
         delete m_currentFile;
         m_currentFile = nullptr;
         
-        emit fileReceived(m_currentTransferId, filePath);
+        QString finalPath = partPath.left(partPath.length() - 5);
+        QFile::rename(partPath, finalPath);
+        
+        emit fileReceived(m_currentTransferId, finalPath);
         
         if (m_currentFileIndex >= m_totalFiles) {
             emit transferCompleted(m_currentTransferId);

@@ -69,6 +69,11 @@ void PeerManager::setDisplayName(const QString& name)
     m_discovery->setDisplayName(name);
 }
 
+void PeerManager::setTransferPort(quint16 port)
+{
+    m_discovery->setTransferPort(port);
+}
+
 void PeerManager::onPeerDiscovered(const QString& peerId, const QString& displayName,
                                    const QString& deviceName, const QHostAddress& address, 
                                    quint16 port)
