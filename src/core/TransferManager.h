@@ -23,7 +23,9 @@ public:
     
     // Settings
     void setDownloadPath(const QString& path);
+    void setMaxFileSize(qint64 size);
     QString downloadPath() const { return m_downloadPath; }
+    qint64 maxFileSize() const { return m_maxFileSize; }
     
     // Transfers
     QList<TransferItem*> transfers() const { return m_transfers.values(); }
@@ -48,6 +50,7 @@ signals:
     void transferAdded(TransferItem* transfer);
     void transferUpdated(TransferItem* transfer);
     void transferRemoved(const QString& transferId);
+    void pairingCodeReady(const QString& code);
     void error(const QString& errorMessage);
     
 private slots:
@@ -72,6 +75,7 @@ private:
     QMap<QString, TransferItem*> m_transfers;
     QMap<QString, TransferSession*> m_pendingRequests; // peerId -> session
     QString m_downloadPath;
+    qint64 m_maxFileSize;
     bool m_running;
 };
 

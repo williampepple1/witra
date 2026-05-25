@@ -3,6 +3,7 @@
 #include <QDirIterator>
 #include <QFileInfo>
 #include <QTimer>
+#include <QRandomGenerator>
 
 namespace Witra {
 
@@ -22,6 +23,8 @@ TransferSession::TransferSession(QTcpSocket* socket, QObject* parent)
     , m_sendFile(nullptr)
     , m_sendTotalSize(0)
     , m_sendBytesSent(0)
+    , m_maxFileSize(MAX_FILE_SIZE)
+    , m_runningHash(QCryptographicHash::Sha256)
 {
     if (m_socket) {
         m_socket->setParent(this);
@@ -50,10 +53,13 @@ QHostAddress TransferSession::peerAddress() const
 
 void TransferSession::sendConnectionRequest(const QString& senderName, const QString& senderId)
 {
+    m_verificationCode = generateVerificationCode();
+    
     TransferHeader header;
     header.type = TransferType::CONNECTION_REQUEST;
     header.senderName = senderName;
     header.transferId = senderId;
+    header.verificationCode = m_verificationCode;
     
     sendHeader(header);
     m_state = State::WaitingForAccept;
@@ -103,6 +109,12 @@ void TransferSession::sendFile(const QString& filePath, const QString& transferI
     m_sendTotalSize = fileInfo.size();
     m_sendBytesSent = 0;
     
+    QCryptographicHash fileHash(QCryptographicHash::Sha256);
+    if (m_sendFile->isOpen()) {
+        fileHash.addData(m_sendFile);
+        m_sendFile->reset();
+    }
+    
     // Send file header
     TransferHeader header;
     header.type = TransferType::FILE_HEADER;
@@ -112,6 +124,7 @@ void TransferSession::sendFile(const QString& filePath, const QString& transferI
     header.fileSize = m_sendTotalSize;
     header.totalFiles = totalFiles;
     header.currentFileIndex = currentFile;
+    header.fileHash = fileHash.result();
     
     sendHeader(header);
     m_state = State::Transferring;
@@ -300,6 +313,7 @@ void TransferSession::handleConnectionRequest(const TransferHeader& header)
     m_peerName = header.senderName.left(MAX_DISPLAY_NAME_LENGTH);
     m_peerId = header.transferId;
     m_isIncoming = true;
+    m_verificationCode = header.verificationCode;
     emit connectionRequestReceived(m_peerName, header.transferId);
 }
 
@@ -308,6 +322,21 @@ void TransferSession::handleConnectionAccept(const TransferHeader& header)
     Q_UNUSED(header)
     m_state = State::Accepted;
     emit connectionAccepted();
+}
+
+QString TransferSession::generateVerificationCode() const
+{
+    int code = QRandomGenerator::global()->bounded(100000, 999999);
+    return QString::number(code);
+}
+
+void TransferSession::startServerEncryption(const QSslConfiguration& config)
+{
+    QSslSocket* sslSocket = qobject_cast<QSslSocket*>(m_socket);
+    if (sslSocket) {
+        sslSocket->setSslConfiguration(config);
+        sslSocket->startServerEncryption();
+    }
 }
 
 void TransferSession::handleConnectionReject(const TransferHeader& header)
@@ -326,6 +355,15 @@ void TransferSession::handleFileHeader(const TransferHeader& header)
     m_currentBytesReceived = 0;
     m_totalFiles = header.totalFiles;
     m_currentFileIndex = header.currentFileIndex;
+    m_expectedHash = header.fileHash;
+    m_runningHash.reset();
+    
+    if (m_currentFileSize > m_maxFileSize) {
+        emit transferFailed(m_currentTransferId,
+                           tr("File exceeds maximum size limit (%1 GB)")
+                           .arg(m_maxFileSize / (1024.0 * 1024.0 * 1024.0), 0, 'f', 1));
+        return;
+    }
     
     // Create destination path
     QString destPath = m_downloadPath;
@@ -392,6 +430,7 @@ void TransferSession::handleFileData(const QByteArray& data)
     
     m_currentFile->write(data);
     m_currentBytesReceived += data.size();
+    m_runningHash.addData(data);
     
     emit transferProgress(m_currentTransferId, m_currentBytesReceived, m_currentFileSize);
 }
@@ -403,6 +442,18 @@ void TransferSession::handleFileComplete(const TransferHeader& header)
     if (m_currentFile) {
         QString partPath = m_currentFile->fileName();
         m_currentFile->close();
+        
+        QByteArray receivedHash = m_runningHash.result();
+        
+        if (!m_expectedHash.isEmpty() && receivedHash != m_expectedHash) {
+            m_currentFile->remove();
+            delete m_currentFile;
+            m_currentFile = nullptr;
+            emit transferFailed(m_currentTransferId,
+                               tr("File integrity check failed - hash mismatch"));
+            return;
+        }
+        
         delete m_currentFile;
         m_currentFile = nullptr;
         

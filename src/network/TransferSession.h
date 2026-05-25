@@ -3,8 +3,11 @@
 
 #include <QObject>
 #include <QTcpSocket>
+#include <QSslSocket>
+#include <QSslConfiguration>
 #include <QFile>
 #include <QDataStream>
+#include <QCryptographicHash>
 #include "Protocol.h"
 
 namespace Witra {
@@ -27,6 +30,8 @@ public:
     explicit TransferSession(QTcpSocket* socket, QObject* parent = nullptr);
     ~TransferSession();
     
+    void startServerEncryption(const QSslConfiguration& config);
+    
     // Getters
     QString sessionId() const { return m_sessionId; }
     QString peerId() const { return m_peerId; }
@@ -34,12 +39,16 @@ public:
     QHostAddress peerAddress() const;
     State state() const { return m_state; }
     bool isIncoming() const { return m_isIncoming; }
+    QString verificationCode() const { return m_verificationCode; }
+    qint64 maxFileSize() const { return m_maxFileSize; }
     
     // Setters
     void setPeerId(const QString& id) { m_peerId = id; }
     void setPeerName(const QString& name) { m_peerName = name; }
     void setIsIncoming(bool incoming) { m_isIncoming = incoming; }
     void setDownloadPath(const QString& path) { m_downloadPath = path; }
+    void setMaxFileSize(qint64 size) { m_maxFileSize = size; }
+    void setVerificationCode(const QString& code) { m_verificationCode = code; }
     
     // Connection requests
     void sendConnectionRequest(const QString& senderName, const QString& senderId);
@@ -85,6 +94,7 @@ private:
     void handleFileData(const QByteArray& data);
     void handleFileComplete(const TransferHeader& header);
     void handleTransferCancel(const TransferHeader& header);
+    QString generateVerificationCode() const;
     
     void sendHeader(const TransferHeader& header);
     void writeMessage(const QByteArray& data, bool isHeader = true);
@@ -96,6 +106,8 @@ private:
     bool m_isIncoming;
     State m_state;
     QString m_downloadPath;
+    QString m_verificationCode;
+    qint64 m_maxFileSize;
     
     // Message parsing
     QByteArray m_buffer;
@@ -111,6 +123,8 @@ private:
     qint64 m_currentBytesReceived;
     qint64 m_totalFiles;
     qint64 m_currentFileIndex;
+    QByteArray m_expectedHash;
+    QCryptographicHash m_runningHash;
     
     // Current sending file
     QFile* m_sendFile;

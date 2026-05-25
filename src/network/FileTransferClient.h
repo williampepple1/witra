@@ -3,6 +3,7 @@
 
 #include <QObject>
 #include <QTcpSocket>
+#include <QSslSocket>
 #include <QMap>
 #include "TransferSession.h"
 
@@ -21,6 +22,7 @@ public:
     QList<TransferSession*> sessions() const { return m_sessions.values(); }
     
     void setDownloadPath(const QString& path) { m_downloadPath = path; }
+    void setMaxFileSize(qint64 size) { m_maxFileSize = size; }
     QString downloadPath() const { return m_downloadPath; }
     
 signals:
@@ -34,6 +36,7 @@ private slots:
 private:
     QMap<QString, TransferSession*> m_sessions;
     QString m_downloadPath;
+    qint64 m_maxFileSize;
 };
 
 } // namespace Witra

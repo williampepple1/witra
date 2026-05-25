@@ -11,7 +11,10 @@ class ConnectionDialog : public QDialog {
     Q_OBJECT
     
 public:
-    explicit ConnectionDialog(const QString& senderName, QWidget* parent = nullptr);
+    explicit ConnectionDialog(const QString& senderName, const QString& verificationCode,
+                             QWidget* parent = nullptr);
+    
+    QString verificationCode() const { return m_verificationCode; }
     
 signals:
     void accepted();
@@ -22,6 +25,7 @@ private:
     void applyStyles();
     
     QString m_senderName;
+    QString m_verificationCode;
 };
 
 } // namespace Witra

@@ -13,6 +13,7 @@ TransferManager::TransferManager(PeerManager* peerManager, QObject* parent)
     , m_server(new FileTransferServer(this))
     , m_client(new FileTransferClient(this))
     , m_running(false)
+    , m_maxFileSize(MAX_FILE_SIZE)
 {
     // Load download path from settings (set by installer or user)
     QSettings settings;
@@ -55,6 +56,8 @@ void TransferManager::start()
     
     m_server->setDownloadPath(m_downloadPath);
     m_client->setDownloadPath(m_downloadPath);
+    m_server->setMaxFileSize(m_maxFileSize);
+    m_client->setMaxFileSize(m_maxFileSize);
     
     if (!m_server->start()) {
         return;
@@ -79,6 +82,11 @@ void TransferManager::setDownloadPath(const QString& path)
     QDir().mkpath(m_downloadPath);
     m_server->setDownloadPath(path);
     m_client->setDownloadPath(path);
+}
+
+void TransferManager::setMaxFileSize(qint64 size)
+{
+    m_maxFileSize = size;
 }
 
 void TransferManager::sendConnectionRequest(Peer* peer)
@@ -280,6 +288,8 @@ void TransferManager::onOutgoingConnectionReady(TransferSession* session)
 {
     // Send connection request
     session->sendConnectionRequest(m_peerManager->displayName(), m_peerManager->peerId());
+    
+    emit pairingCodeReady(session->verificationCode());
     
     connect(session, &TransferSession::connectionAccepted, this, [this, session]() {
         Peer* peer = m_peerManager->peer(session->peerId());

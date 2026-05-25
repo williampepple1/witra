@@ -1,5 +1,8 @@
 #include "FileTransferServer.h"
 #include <QDir>
+#include <QFile>
+#include <QSslCertificate>
+#include <QSslKey>
 
 namespace Witra {
 
@@ -7,8 +10,23 @@ FileTransferServer::FileTransferServer(QObject* parent)
     : QObject(parent)
     , m_server(new QTcpServer(this))
     , m_connectionCount(0)
+    , m_maxFileSize(MAX_FILE_SIZE)
 {
-    // Default download path
+    QFile certFile(":/certs/cert.pem");
+    QFile keyFile(":/certs/key.pem");
+    
+    if (certFile.open(QIODevice::ReadOnly) && keyFile.open(QIODevice::ReadOnly)) {
+        QSslCertificate cert(&certFile, QSsl::Pem);
+        QSslKey key(&keyFile, QSsl::Rsa, QSsl::Pem);
+        
+        if (!cert.isNull() && !key.isNull()) {
+            m_sslConfig.setLocalCertificate(cert);
+            m_sslConfig.setPrivateKey(key);
+            m_sslConfig.setPeerVerifyMode(QSslSocket::VerifyNone);
+            m_sslConfig.setProtocol(QSsl::TlsV1_2OrLater);
+        }
+    }
+    
     m_downloadPath = QDir::homePath() + "/Downloads/Witra";
     QDir().mkpath(m_downloadPath);
     
@@ -76,9 +94,17 @@ void FileTransferServer::onNewConnection()
         
         QTcpSocket* socket = m_server->nextPendingConnection();
         
-        TransferSession* session = new TransferSession(socket, this);
+        QSslSocket* sslSocket = new QSslSocket(this);
+        sslSocket->setSocketDescriptor(socket->socketDescriptor());
+        socket->deleteLater();
+        
+        sslSocket->setSslConfiguration(m_sslConfig);
+        sslSocket->startServerEncryption();
+        
+        TransferSession* session = new TransferSession(sslSocket, this);
         session->setIsIncoming(true);
         session->setDownloadPath(m_downloadPath);
+        session->setMaxFileSize(m_maxFileSize);
         
         m_sessions[session->sessionId()] = session;
         m_connectionCount++;

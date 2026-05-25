@@ -44,6 +44,14 @@ MainWindow::MainWindow(QWidget* parent)
             this, &MainWindow::onError);
     connect(m_peerManager, &PeerManager::error,
             this, &MainWindow::onError);
+    connect(m_transferManager, &TransferManager::pairingCodeReady,
+            this, [this](const QString& code) {
+        if (m_trayIcon) {
+            m_trayIcon->showMessage("Verification Code",
+                QString("Connection pairing code: %1").arg(code),
+                QSystemTrayIcon::Information, 10000);
+        }
+    });
     
     // Start services
     m_peerManager->start();
@@ -345,7 +353,8 @@ void MainWindow::showTransferPage()
 void MainWindow::onConnectionRequestReceived(TransferSession* session, 
                                               const QString& senderName)
 {
-    ConnectionDialog* dialog = new ConnectionDialog(senderName, this);
+    ConnectionDialog* dialog = new ConnectionDialog(senderName, 
+                                                     session->verificationCode(), this);
     
     connect(dialog, &ConnectionDialog::accepted, this, [this, session]() {
         m_transferManager->acceptConnectionRequest(session);

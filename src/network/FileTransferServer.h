@@ -3,6 +3,8 @@
 
 #include <QObject>
 #include <QTcpServer>
+#include <QSslSocket>
+#include <QSslConfiguration>
 #include <QMap>
 #include "TransferSession.h"
 
@@ -21,7 +23,9 @@ public:
     quint16 port() const;
     
     void setDownloadPath(const QString& path) { m_downloadPath = path; }
+    void setMaxFileSize(qint64 size) { m_maxFileSize = size; }
     QString downloadPath() const { return m_downloadPath; }
+    QSslConfiguration sslConfiguration() const { return m_sslConfig; }
     
     TransferSession* session(const QString& sessionId) const;
     QList<TransferSession*> sessions() const { return m_sessions.values(); }
@@ -40,7 +44,9 @@ private:
     QTcpServer* m_server;
     QMap<QString, TransferSession*> m_sessions;
     QString m_downloadPath;
+    qint64 m_maxFileSize;
     int m_connectionCount;
+    QSslConfiguration m_sslConfig;
 };
 
 } // namespace Witra

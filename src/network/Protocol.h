@@ -26,6 +26,8 @@ constexpr qint32 MAX_MESSAGE_SIZE = 1048576; // 1MB max incoming message size (p
 constexpr int MAX_DISPLAY_NAME_LENGTH = 64; // max chars for network-provided display names
 constexpr int MAX_CONNECTIONS = 10; // max concurrent incoming connections
 constexpr int MAX_PORT_RANGE = 100; // ports to try if default is occupied
+constexpr qint64 MAX_FILE_SIZE = 10LL * 1024 * 1024 * 1024; // 10GB max file size
+constexpr int VERIFICATION_CODE_LENGTH = 6; // digits in pairing code
 
 // Message types for discovery
 namespace DiscoveryType {
@@ -96,6 +98,8 @@ struct TransferHeader {
     qint64 totalFiles;
     qint64 currentFileIndex;
     QString senderName;
+    QString verificationCode;
+    QByteArray fileHash;
     
     QByteArray toJson() const {
         QJsonObject obj;
@@ -107,6 +111,8 @@ struct TransferHeader {
         obj["totalFiles"] = totalFiles;
         obj["currentFileIndex"] = currentFileIndex;
         obj["senderName"] = senderName;
+        obj["verificationCode"] = verificationCode;
+        obj["fileHash"] = QString::fromLatin1(fileHash.toHex());
         return QJsonDocument(obj).toJson(QJsonDocument::Compact);
     }
     
@@ -123,6 +129,8 @@ struct TransferHeader {
             header.totalFiles = obj["totalFiles"].toVariant().toLongLong();
             header.currentFileIndex = obj["currentFileIndex"].toVariant().toLongLong();
             header.senderName = obj["senderName"].toString();
+            header.verificationCode = obj["verificationCode"].toString();
+            header.fileHash = QByteArray::fromHex(obj["fileHash"].toString().toLatin1());
         }
         return header;
     }

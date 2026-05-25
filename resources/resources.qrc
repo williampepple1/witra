@@ -3,5 +3,7 @@
     <qresource prefix="/">
         <file>icons/app.svg</file>
         <file>styles/main.qss</file>
+        <file>certs/cert.pem</file>
+        <file>certs/key.pem</file>
     </qresource>
 </RCC>

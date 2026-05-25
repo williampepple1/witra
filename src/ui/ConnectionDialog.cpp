@@ -8,9 +8,11 @@
 
 namespace Witra {
 
-ConnectionDialog::ConnectionDialog(const QString& senderName, QWidget* parent)
+ConnectionDialog::ConnectionDialog(const QString& senderName, const QString& verificationCode,
+                                   QWidget* parent)
     : QDialog(parent, Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint)
     , m_senderName(senderName)
+    , m_verificationCode(verificationCode)
 {
     setAttribute(Qt::WA_TranslucentBackground);
     setModal(false);
@@ -40,7 +42,7 @@ ConnectionDialog::ConnectionDialog(const QString& senderName, QWidget* parent)
 
 void ConnectionDialog::setupUi()
 {
-    setFixedSize(340, 160);
+    setFixedSize(340, 210);
     
     QVBoxLayout* mainLayout = new QVBoxLayout(this);
     mainLayout->setContentsMargins(0, 0, 0, 0);
@@ -63,6 +65,14 @@ void ConnectionDialog::setupUi()
     );
     messageLabel->setObjectName("dialogMessage");
     messageLabel->setWordWrap(true);
+    
+    QLabel* codeLabel = new QLabel(
+        QString("Verification code: <b style='font-size:18px;letter-spacing:3px;'>%1</b>")
+        .arg(m_verificationCode)
+    );
+    codeLabel->setObjectName("dialogCode");
+    codeLabel->setWordWrap(true);
+    codeLabel->setAlignment(Qt::AlignCenter);
     
     // Buttons
     QHBoxLayout* buttonLayout = new QHBoxLayout();
@@ -87,6 +97,7 @@ void ConnectionDialog::setupUi()
     
     containerLayout->addWidget(titleLabel);
     containerLayout->addWidget(messageLabel);
+    containerLayout->addWidget(codeLabel);
     containerLayout->addStretch();
     containerLayout->addLayout(buttonLayout);
     
@@ -118,6 +129,16 @@ void ConnectionDialog::applyStyles()
         
         #dialogMessage b {
             color: #E8C87A;
+        }
+        
+        #dialogCode {
+            font-family: 'Segoe UI', sans-serif;
+            font-size: 13px;
+            color: #F0F6FC;
+            padding: 8px 12px;
+            background-color: #21262D;
+            border: 1px solid #30363D;
+            border-radius: 8px;
         }
         
         #declineButton {
