@@ -204,7 +204,7 @@ void MainWindow::setupUi()
     statusLayout->addWidget(statusLabel);
     statusLayout->addStretch();
     
-    QLabel* versionLabel = new QLabel("v1.0.0");
+    QLabel* versionLabel = new QLabel(QString("v%1").arg(qApp->applicationVersion()));
     versionLabel->setObjectName("versionLabel");
     statusLayout->addWidget(versionLabel);
     

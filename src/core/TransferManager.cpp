@@ -342,16 +342,22 @@ void TransferManager::onSessionTransferStarted(const QString& transferId,
     TransferSession* session = qobject_cast<TransferSession*>(sender());
     if (!session) return;
     
-    TransferItem* item = new TransferItem(
-        transferId, fileName, totalSize,
-        TransferItem::Direction::Incoming, session->peerId(), this
-    );
-    item->setPeerName(session->peerName());
-    item->setTotalFiles(totalFiles);
-    item->setStatus(TransferItem::Status::InProgress);
-    
-    m_transfers[transferId] = item;
-    emit transferAdded(item);
+    TransferItem* item = m_transfers.value(transferId, nullptr);
+    if (item) {
+        item->setStatus(TransferItem::Status::InProgress);
+        emit transferUpdated(item);
+    } else {
+        item = new TransferItem(
+            transferId, fileName, totalSize,
+            TransferItem::Direction::Incoming, session->peerId(), this
+        );
+        item->setPeerName(session->peerName());
+        item->setTotalFiles(totalFiles);
+        item->setStatus(TransferItem::Status::InProgress);
+        
+        m_transfers[transferId] = item;
+        emit transferAdded(item);
+    }
 }
 
 void TransferManager::onSessionTransferCompleted(const QString& transferId)
@@ -411,6 +417,14 @@ void TransferManager::onSessionDisconnected(TransferSession* session)
     QString peerId = session->peerId();
     if (!peerId.isEmpty()) {
         updatePeerStateOnDisconnect(peerId);
+    }
+    
+    for (auto it = m_transferSessions.begin(); it != m_transferSessions.end(); ) {
+        if (it.value() == session) {
+            it = m_transferSessions.erase(it);
+        } else {
+            ++it;
+        }
     }
     
     // Remove from pending requests
