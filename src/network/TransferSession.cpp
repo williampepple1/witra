@@ -358,7 +358,7 @@ void TransferSession::handleFileHeader(const TransferHeader& header)
     m_expectedHash = header.fileHash;
     m_runningHash.reset();
     
-    if (m_currentFileSize > m_maxFileSize) {
+    if (m_maxFileSize > 0 && m_currentFileSize > m_maxFileSize) {
         emit transferFailed(m_currentTransferId,
                            tr("File exceeds maximum size limit (%1 GB)")
                            .arg(m_maxFileSize / (1024.0 * 1024.0 * 1024.0), 0, 'f', 1));

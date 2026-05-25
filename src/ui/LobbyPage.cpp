@@ -5,6 +5,7 @@
 #include <QFileDialog>
 #include <QPushButton>
 #include <QGridLayout>
+#include <QSettings>
 
 namespace Witra {
 
@@ -14,6 +15,7 @@ LobbyPage::LobbyPage(PeerManager* peerManager, TransferManager* transferManager,
     , m_peerManager(peerManager)
     , m_transferManager(transferManager)
     , m_displayNameEdit(nullptr)
+    , m_maxFileSizeCombo(nullptr)
     , m_peersContainer(nullptr)
     , m_peersLayout(nullptr)
     , m_emptyLabel(nullptr)
@@ -67,6 +69,38 @@ void LobbyPage::setupUi()
     
     settingsLayout->addWidget(settingsTitle);
     settingsLayout->addLayout(nameLayout);
+    
+    QHBoxLayout* sizeLayout = new QHBoxLayout();
+    sizeLayout->setSpacing(12);
+    
+    QLabel* sizeLabel = new QLabel("Max File Size:");
+    sizeLabel->setObjectName("fieldLabel");
+    
+    m_maxFileSizeCombo = new QComboBox();
+    m_maxFileSizeCombo->setObjectName("sizeCombo");
+    m_maxFileSizeCombo->addItem("100 MB", QVariant::fromValue(100LL * 1024 * 1024));
+    m_maxFileSizeCombo->addItem("500 MB", QVariant::fromValue(500LL * 1024 * 1024));
+    m_maxFileSizeCombo->addItem("1 GB", QVariant::fromValue(1LL * 1024 * 1024 * 1024));
+    m_maxFileSizeCombo->addItem("2 GB", QVariant::fromValue(2LL * 1024 * 1024 * 1024));
+    m_maxFileSizeCombo->addItem("5 GB", QVariant::fromValue(5LL * 1024 * 1024 * 1024));
+    m_maxFileSizeCombo->addItem("10 GB", QVariant::fromValue(10LL * 1024 * 1024 * 1024));
+    m_maxFileSizeCombo->addItem("No Limit", QVariant::fromValue(0LL));
+    
+    qint64 currentMax = m_transferManager->maxFileSize();
+    for (int i = 0; i < m_maxFileSizeCombo->count(); ++i) {
+        if (m_maxFileSizeCombo->itemData(i).toLongLong() == currentMax) {
+            m_maxFileSizeCombo->setCurrentIndex(i);
+            break;
+        }
+    }
+    
+    connect(m_maxFileSizeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &LobbyPage::onMaxFileSizeChanged);
+    
+    sizeLayout->addWidget(sizeLabel);
+    sizeLayout->addWidget(m_maxFileSizeCombo, 1);
+    
+    settingsLayout->addLayout(sizeLayout);
     
     mainLayout->addWidget(settingsCard);
     
@@ -172,6 +206,34 @@ void LobbyPage::applyStyles()
             outline: none;
         }
         
+        #sizeCombo {
+            background-color: #0D1117;
+            border: 1px solid #30363D;
+            border-radius: 8px;
+            padding: 10px 14px;
+            font-family: 'Segoe UI', sans-serif;
+            font-size: 14px;
+            color: #F0F6FC;
+        }
+        
+        #sizeCombo:hover {
+            border-color: #484F58;
+        }
+        
+        #sizeCombo:focus {
+            border-color: #E8C87A;
+            outline: none;
+        }
+        
+        #sizeCombo QAbstractItemView {
+            background-color: #161B22;
+            border: 1px solid #30363D;
+            border-radius: 8px;
+            padding: 8px;
+            color: #F0F6FC;
+            selection-background-color: #21262D;
+        }
+        
         #sectionTitle {
             font-family: 'Segoe UI', sans-serif;
             font-size: 18px;
@@ -250,6 +312,14 @@ void LobbyPage::onDisplayNameChanged()
     if (!newName.isEmpty() && newName != m_peerManager->displayName()) {
         m_peerManager->setDisplayName(newName);
     }
+}
+
+void LobbyPage::onMaxFileSizeChanged()
+{
+    qint64 size = m_maxFileSizeCombo->currentData().toLongLong();
+    m_transferManager->setMaxFileSize(size);
+    QSettings settings;
+    settings.setValue("settings/maxFileSize", size);
 }
 
 void LobbyPage::updatePeerList()

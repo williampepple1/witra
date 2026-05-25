@@ -15,8 +15,12 @@ TransferManager::TransferManager(PeerManager* peerManager, QObject* parent)
     , m_running(false)
     , m_maxFileSize(MAX_FILE_SIZE)
 {
-    // Load download path from settings (set by installer or user)
     QSettings settings;
+    if (settings.contains("settings/maxFileSize")) {
+        m_maxFileSize = settings.value("settings/maxFileSize").toLongLong();
+    }
+    
+    // Load download path from settings (set by installer or user)
     QString defaultPath = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation) + "/Witra Downloads";
     m_downloadPath = settings.value("DownloadPath", defaultPath).toString();
     

@@ -5,6 +5,7 @@
 #include <QVBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
+#include <QComboBox>
 #include "core/PeerManager.h"
 #include "core/TransferManager.h"
 
@@ -26,6 +27,7 @@ private slots:
     void onPeerRemoved(const QString& peerId);
     void onPeerUpdated(Peer* peer);
     void onDisplayNameChanged();
+    void onMaxFileSizeChanged();
     void updatePeerList();
     
 private:
@@ -36,6 +38,7 @@ private:
     TransferManager* m_transferManager;
     
     QLineEdit* m_displayNameEdit;
+    QComboBox* m_maxFileSizeCombo;
     QWidget* m_peersContainer;
     QVBoxLayout* m_peersLayout;
     QLabel* m_emptyLabel;
