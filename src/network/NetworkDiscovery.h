@@ -5,6 +5,8 @@
 #include <QUdpSocket>
 #include <QTimer>
 #include <QNetworkInterface>
+#include <QMap>
+#include <QRandomGenerator>
 #include "Protocol.h"
 
 namespace Witra {
@@ -41,6 +43,7 @@ private:
     void broadcast(const DiscoveryMessage& message);
     QList<QHostAddress> getBroadcastAddresses() const;
     QString getDeviceName() const;
+    QByteArray generateToken() const;
     
     QUdpSocket* m_socket;
     QTimer* m_broadcastTimer;
@@ -49,6 +52,8 @@ private:
     QString m_deviceName;
     quint16 m_transferPort;
     bool m_running;
+    QByteArray m_currentToken;
+    QMap<QString, QPair<QByteArray, QHostAddress>> m_peerTokens;
 };
 
 } // namespace Witra

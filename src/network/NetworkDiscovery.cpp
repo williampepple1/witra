@@ -1,6 +1,7 @@
 #include "NetworkDiscovery.h"
 #include <QNetworkDatagram>
 #include <QHostInfo>
+#include <QDateTime>
 #include <algorithm>
 
 namespace Witra {
@@ -55,6 +56,9 @@ void NetworkDiscovery::start(const QString& peerId, const QString& displayName, 
     
     m_running = true;
     
+    // Generate initial discovery token
+    m_currentToken = generateToken();
+    
     // Start broadcasting
     broadcastAnnounce();
     m_broadcastTimer->start(DISCOVERY_INTERVAL);
@@ -66,6 +70,7 @@ void NetworkDiscovery::stop()
     
     m_broadcastTimer->stop();
     m_socket->close();
+    m_peerTokens.clear();
     m_running = false;
 }
 
@@ -79,18 +84,25 @@ void NetworkDiscovery::sendGoodbye()
     msg.displayName = m_displayName;
     msg.deviceName = m_deviceName;
     msg.transferPort = m_transferPort;
+    msg.timestamp = QDateTime::currentSecsSinceEpoch();
+    msg.token = m_currentToken;
     
     broadcast(msg);
 }
 
 void NetworkDiscovery::broadcastAnnounce()
 {
+    // Rotate token on each broadcast to limit replay windows
+    m_currentToken = generateToken();
+    
     DiscoveryMessage msg;
     msg.type = DiscoveryType::ANNOUNCE;
     msg.peerId = m_peerId;
     msg.displayName = m_displayName;
     msg.deviceName = m_deviceName;
     msg.transferPort = m_transferPort;
+    msg.timestamp = QDateTime::currentSecsSinceEpoch();
+    msg.token = m_currentToken;
     
     broadcast(msg);
 }
@@ -118,15 +130,37 @@ void NetworkDiscovery::readPendingDatagrams()
         // Ignore our own broadcasts
         if (msg.peerId == m_peerId) continue;
         
+        // Reject stale messages
+        qint64 now = QDateTime::currentSecsSinceEpoch();
+        if (qAbs(now - msg.timestamp) > DISCOVERY_TIMESTAMP_WINDOW) continue;
+        
         if (msg.type == DiscoveryType::ANNOUNCE) {
+            m_peerTokens[msg.peerId] = qMakePair(msg.token, datagram.senderAddress());
+            
             QString name = msg.displayName.left(MAX_DISPLAY_NAME_LENGTH);
             QString device = msg.deviceName.left(MAX_DISPLAY_NAME_LENGTH);
             emit peerDiscovered(msg.peerId, name, device,
                                datagram.senderAddress(), msg.transferPort);
         } else if (msg.type == DiscoveryType::GOODBYE) {
+            auto it = m_peerTokens.find(msg.peerId);
+            if (it == m_peerTokens.end()) continue;
+            
+            if (it->first != msg.token) continue;
+            if (it->second != datagram.senderAddress()) continue;
+            
+            m_peerTokens.erase(it);
             emit peerGoodbye(msg.peerId);
         }
     }
+}
+
+QByteArray NetworkDiscovery::generateToken() const
+{
+    QByteArray token(16, '\0');
+    for (int i = 0; i < 16; ++i) {
+        token[i] = static_cast<char>(QRandomGenerator::global()->bounded(256));
+    }
+    return token;
 }
 
 QList<QHostAddress> NetworkDiscovery::getBroadcastAddresses() const

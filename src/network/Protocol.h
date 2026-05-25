@@ -5,6 +5,8 @@
 #include <QJsonObject>
 #include <QJsonDocument>
 #include <QUuid>
+#include <QMessageAuthenticationCode>
+#include <QDateTime>
 
 namespace Witra {
 
@@ -28,6 +30,7 @@ constexpr int MAX_CONNECTIONS = 10; // max concurrent incoming connections
 constexpr int MAX_PORT_RANGE = 100; // ports to try if default is occupied
 constexpr qint64 MAX_FILE_SIZE = 10LL * 1024 * 1024 * 1024; // 10GB max file size
 constexpr int VERIFICATION_CODE_LENGTH = 6; // digits in pairing code
+constexpr int DISCOVERY_TIMESTAMP_WINDOW = 15; // seconds of tolerance for discovery message timestamps
 
 // Message types for discovery
 namespace DiscoveryType {
@@ -57,6 +60,8 @@ struct DiscoveryMessage {
     QString displayName;
     QString deviceName;
     quint16 transferPort;
+    qint64 timestamp;
+    QByteArray token;
     
     QByteArray toJson() const {
         QJsonObject obj;
@@ -65,7 +70,9 @@ struct DiscoveryMessage {
         obj["displayName"] = displayName;
         obj["deviceName"] = deviceName;
         obj["transferPort"] = transferPort;
-        obj["protocol"] = "witra-v1";
+        obj["timestamp"] = timestamp;
+        obj["token"] = QString::fromLatin1(token.toHex());
+        obj["protocol"] = "witra-v2";
         return QJsonDocument(obj).toJson(QJsonDocument::Compact);
     }
     
@@ -79,6 +86,8 @@ struct DiscoveryMessage {
             msg.displayName = obj["displayName"].toString();
             msg.deviceName = obj["deviceName"].toString();
             msg.transferPort = static_cast<quint16>(obj["transferPort"].toInt());
+            msg.timestamp = obj["timestamp"].toVariant().toLongLong();
+            msg.token = QByteArray::fromHex(obj["token"].toString().toLatin1());
         }
         return msg;
     }
