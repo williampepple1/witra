@@ -20,6 +20,7 @@ constexpr int PEER_TIMEOUT = 10000;
 
 // Buffer sizes
 constexpr qint64 CHUNK_SIZE = 65536; // 64KB chunks for file transfer
+constexpr qint32 MAX_MESSAGE_SIZE = 1048576; // 1MB max incoming message size (prevents memory exhaustion)
 
 // Message types for discovery
 namespace DiscoveryType {

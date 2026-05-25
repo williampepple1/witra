@@ -249,6 +249,12 @@ void TransferSession::onReadyRead()
             QDataStream stream(m_buffer.left(4));
             stream.setByteOrder(QDataStream::BigEndian);
             stream >> m_expectedSize;
+            
+            if (m_expectedSize <= 0 || m_expectedSize > MAX_MESSAGE_SIZE) {
+                emit error(tr("Invalid message size received from peer"));
+                m_expectedSize = 0;
+                break;
+            }
         }
         
         // Check if we have the complete message
@@ -335,9 +341,15 @@ void TransferSession::handleFileHeader(const TransferHeader& header)
     // Handle relative path for folders
     QString filePath;
     if (m_currentRelativePath.contains('/')) {
-        QString subDir = m_currentRelativePath.left(m_currentRelativePath.lastIndexOf('/'));
+        QString cleanPath = QDir::cleanPath(m_currentRelativePath);
+        if (cleanPath.startsWith("..") || QDir::isAbsolutePath(cleanPath)) {
+            emit transferFailed(m_currentTransferId,
+                               tr("Security: invalid file path from peer"));
+            return;
+        }
+        QString subDir = cleanPath.left(cleanPath.lastIndexOf('/'));
         destDir.mkpath(subDir);
-        filePath = destDir.absoluteFilePath(m_currentRelativePath);
+        filePath = destDir.absoluteFilePath(cleanPath);
     } else {
         filePath = destDir.absoluteFilePath(m_currentFileName);
     }

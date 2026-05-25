@@ -59,7 +59,7 @@ void ConnectionDialog::setupUi()
     // Message
     QLabel* messageLabel = new QLabel(
         QString("<b>%1</b> wants to connect and share files with you.")
-        .arg(m_senderName)
+        .arg(m_senderName.toHtmlEscaped())
     );
     messageLabel->setObjectName("dialogMessage");
     messageLabel->setWordWrap(true);
