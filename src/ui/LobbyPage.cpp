@@ -168,7 +168,7 @@ void LobbyPage::applyStyles()
         }
         
         #nameEdit:focus {
-            border-color: #00D9FF;
+            border-color: #E8C87A;
             outline: none;
         }
         
@@ -189,7 +189,7 @@ void LobbyPage::applyStyles()
         #refreshLabel {
             font-family: 'Segoe UI', sans-serif;
             font-size: 12px;
-            color: #00D9FF;
+            color: #E8C87A;
         }
         
         #peersScroll {

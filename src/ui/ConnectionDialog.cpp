@@ -117,7 +117,7 @@ void ConnectionDialog::applyStyles()
         }
         
         #dialogMessage b {
-            color: #00D9FF;
+            color: #E8C87A;
         }
         
         #declineButton {

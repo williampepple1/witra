@@ -162,11 +162,11 @@ void PeerWidget::applyStyles()
         #statusLabel {
             font-family: 'Segoe UI', sans-serif;
             font-size: 12px;
-            color: #00D9FF;
+            color: #E8C87A;
         }
         
         #connectButton {
-            background-color: #00D9FF;
+            background-color: #E8C87A;
             border: none;
             border-radius: 8px;
             padding: 8px 20px;
@@ -177,7 +177,7 @@ void PeerWidget::applyStyles()
         }
         
         #connectButton:hover {
-            background-color: #33E1FF;
+            background-color: #F0D898;
         }
         
         #connectButton:disabled {
@@ -281,7 +281,7 @@ void PeerWidget::updateDisplay()
             statusColor = "#D29922";
             break;
         case Peer::ConnectionState::Discovered:
-            statusColor = "#00D9FF";
+            statusColor = "#E8C87A";
             break;
         default:
             break;
@@ -328,8 +328,8 @@ QString PeerWidget::getAvatarColor() const
 {
     // Generate consistent color from peer ID
     static const QStringList colors = {
-        "#238636", "#1F6FEB", "#A371F7", "#DB61A2", 
-        "#F85149", "#D29922", "#3FB950", "#58A6FF"
+        "#238636", "#C49A3C", "#A371F7", "#DB61A2", 
+        "#F85149", "#D29922", "#3FB950", "#E8C87A"
     };
     
     uint hash = 0;

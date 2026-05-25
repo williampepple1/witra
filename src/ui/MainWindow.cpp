@@ -93,7 +93,7 @@ void MainWindow::setupUi()
     QLabel* logo = new QLabel();
     logo->setObjectName("logo");
     logo->setText("◇");
-    logo->setStyleSheet("font-size: 28px; color: #00D9FF;");
+    logo->setStyleSheet("font-size: 28px; color: #E8C87A;");
     
     QLabel* title = new QLabel("Witra");
     title->setObjectName("title");
@@ -277,7 +277,7 @@ void MainWindow::applyStyles()
         }
         
         #navButton:checked {
-            background-color: #00D9FF;
+            background-color: #E8C87A;
             color: #0D1117;
         }
         

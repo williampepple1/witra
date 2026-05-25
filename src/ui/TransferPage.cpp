@@ -77,7 +77,7 @@ void TransferPage::setupUi()
         return card;
     };
     
-    QWidget* activeCard = createStatCard("Active", "0", "#00D9FF");
+    QWidget* activeCard = createStatCard("Active", "0", "#E8C87A");
     QWidget* completedCard = createStatCard("Completed", "0", "#238636");
     QWidget* failedCard = createStatCard("Failed", "0", "#F85149");
     

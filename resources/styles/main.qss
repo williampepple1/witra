@@ -1,7 +1,7 @@
 /* Witra Global Styles */
 
 /* Main Application Colors */
-/* Primary: #00D9FF (Cyan) */
+/* Primary: #E8C87A (Cream) */
 /* Background: #0D1117 (Dark) */
 /* Surface: #161B22 (Elevated) */
 /* Border: #30363D (Subtle) */
@@ -57,11 +57,11 @@ QLineEdit {
     border-radius: 6px;
     padding: 8px 12px;
     color: #F0F6FC;
-    selection-background-color: #1F6FEB;
+    selection-background-color: #C49A3C;
 }
 
 QLineEdit:focus {
-    border-color: #00D9FF;
+    border-color: #E8C87A;
 }
 
 QLineEdit:disabled {
@@ -107,7 +107,7 @@ QProgressBar {
 }
 
 QProgressBar::chunk {
-    background-color: #00D9FF;
+    background-color: #E8C87A;
     border-radius: 3px;
 }
 

@@ -156,7 +156,7 @@ void TransferWidget::applyStyles()
         #speedLabel {
             font-family: 'Segoe UI', sans-serif;
             font-size: 12px;
-            color: #00D9FF;
+            color: #E8C87A;
         }
         
         #transferProgress {
@@ -166,7 +166,7 @@ void TransferWidget::applyStyles()
         }
         
         #transferProgress::chunk {
-            background-color: #00D9FF;
+            background-color: #E8C87A;
             border-radius: 2px;
         }
         
@@ -236,7 +236,7 @@ void TransferWidget::updateDisplay()
     QString statusStyle;
     switch (status) {
         case TransferItem::Status::InProgress:
-            statusStyle = "background-color: #0D419D; color: #58A6FF;";
+            statusStyle = "background-color: #5C3D0E; color: #E8C87A;";
             break;
         case TransferItem::Status::Completed:
             statusStyle = "background-color: #0E4429; color: #3FB950;";
@@ -255,7 +255,7 @@ void TransferWidget::updateDisplay()
     ).arg(statusStyle));
     
     // Progress bar color
-    QString progressColor = "#00D9FF";
+    QString progressColor = "#E8C87A";
     if (status == TransferItem::Status::Completed) {
         progressColor = "#238636";
     } else if (status == TransferItem::Status::Failed || 

@@ -1,7 +1,7 @@
 ; Witra Installer Script for Inno Setup
 
 #define MyAppName "Witra"
-#define MyAppVersion "1.1.0"
+#define MyAppVersion "1.1.1"
 #define MyAppPublisher "Witra"
 #define MyAppURL "https://github.com/witra"
 #define MyAppExeName "witra.exe"

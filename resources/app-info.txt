@@ -1,6 +1,6 @@
 
                     WITRA - WIRELESS TRANSFER
-                         Version 1.1.0
+                         Version 1.1.1
 
 
     Welcome! You're about to install Witra, the easiest way to 
