@@ -27,7 +27,7 @@ public:
     
 signals:
     void connected(TransferSession* session);
-    void connectionFailed(const QString& error);
+    void connectionFailed(TransferSession* session, const QString& error);
     void sessionClosed(const QString& sessionId);
     
 private slots:

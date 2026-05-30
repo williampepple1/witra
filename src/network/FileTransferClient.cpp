@@ -52,19 +52,18 @@ TransferSession* FileTransferClient::connectToPeer(const QHostAddress& address, 
         });
         connect(sslSocket, &QSslSocket::errorOccurred, this,
                 [this, session](QAbstractSocket::SocketError) {
-            emit connectionFailed(session->socket()->errorString());
+            emit connectionFailed(session, session->socket()->errorString());
             m_sessions.remove(session->sessionId());
             session->deleteLater();
         });
-        sslSocket->connectToHost(address.toString(), port);
-        sslSocket->startClientEncryption();
+        sslSocket->connectToHostEncrypted(address.toString(), port);
     } else {
         connect(socket, &QTcpSocket::connected, this, [this, session]() {
             emit connected(session);
         });
         connect(socket, &QTcpSocket::errorOccurred, this,
                 [this, session](QAbstractSocket::SocketError) {
-            emit connectionFailed(session->socket()->errorString());
+            emit connectionFailed(session, session->socket()->errorString());
             m_sessions.remove(session->sessionId());
             session->deleteLater();
         });

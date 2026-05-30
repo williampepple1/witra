@@ -10,6 +10,20 @@
 
 namespace Witra {
 
+// Custom QTcpServer subclass that overrides incomingConnection to avoid
+// double-close of the socket descriptor (C1 fix)
+class CustomTcpServer : public QTcpServer {
+    Q_OBJECT
+public:
+    explicit CustomTcpServer(QObject* parent = nullptr) : QTcpServer(parent) {}
+signals:
+    void incomingSocketDescriptor(qintptr socketDescriptor);
+protected:
+    void incomingConnection(qintptr socketDescriptor) override {
+        emit incomingSocketDescriptor(socketDescriptor);
+    }
+};
+
 class FileTransferServer : public QObject {
     Q_OBJECT
     
@@ -37,11 +51,11 @@ signals:
     void error(const QString& errorMessage);
     
 private slots:
-    void onNewConnection();
+    void handleIncomingConnection(qintptr socketDescriptor);
     void onSessionDisconnected();
     
 private:
-    QTcpServer* m_server;
+    CustomTcpServer* m_server;
     QMap<QString, TransferSession*> m_sessions;
     QString m_downloadPath;
     qint64 m_maxFileSize;

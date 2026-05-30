@@ -196,9 +196,11 @@ void MainWindow::setupUi()
         statusLabel->setText(status);
     };
     
-    QTimer* statusTimer = new QTimer(this);
-    connect(statusTimer, &QTimer::timeout, updateStatus);
-    statusTimer->start(1000);
+    connect(m_peerManager, &PeerManager::peerAdded, this, updateStatus);
+    connect(m_peerManager, &PeerManager::peerRemoved, this, updateStatus);
+    connect(m_transferManager, &TransferManager::transferAdded, this, updateStatus);
+    connect(m_transferManager, &TransferManager::transferUpdated, this, updateStatus);
+    connect(m_transferManager, &TransferManager::transferRemoved, this, updateStatus);
     updateStatus();
     
     statusLayout->addWidget(statusLabel);
@@ -343,11 +345,21 @@ void MainWindow::applyStyles()
 void MainWindow::showLobbyPage()
 {
     m_stackedWidget->setCurrentWidget(m_lobbyPage);
+    QList<QPushButton*> btns = findChildren<QPushButton*>("navButton");
+    if (btns.size() >= 2) {
+        btns[0]->setChecked(true);
+        btns[1]->setChecked(false);
+    }
 }
 
 void MainWindow::showTransferPage()
 {
     m_stackedWidget->setCurrentWidget(m_transferPage);
+    QList<QPushButton*> btns = findChildren<QPushButton*>("navButton");
+    if (btns.size() >= 2) {
+        btns[0]->setChecked(false);
+        btns[1]->setChecked(true);
+    }
 }
 
 void MainWindow::onConnectionRequestReceived(TransferSession* session, 
@@ -355,6 +367,7 @@ void MainWindow::onConnectionRequestReceived(TransferSession* session,
 {
     ConnectionDialog* dialog = new ConnectionDialog(senderName, 
                                                      session->verificationCode(), this);
+    dialog->setAttribute(Qt::WA_DeleteOnClose); // Fix H9
     
     connect(dialog, &ConnectionDialog::accepted, this, [this, session]() {
         m_transferManager->acceptConnectionRequest(session);

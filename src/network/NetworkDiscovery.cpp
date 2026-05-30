@@ -92,9 +92,6 @@ void NetworkDiscovery::sendGoodbye()
 
 void NetworkDiscovery::broadcastAnnounce()
 {
-    // Rotate token on each broadcast to limit replay windows
-    m_currentToken = generateToken();
-    
     DiscoveryMessage msg;
     msg.type = DiscoveryType::ANNOUNCE;
     msg.peerId = m_peerId;
@@ -112,7 +109,9 @@ void NetworkDiscovery::broadcast(const DiscoveryMessage& message)
     QByteArray data = message.toJson();
     
     for (const QHostAddress& broadcastAddr : getBroadcastAddresses()) {
-        m_socket->writeDatagram(data, broadcastAddr, DISCOVERY_PORT);
+        for (int offset = 0; offset < MAX_PORT_RANGE; ++offset) {
+            m_socket->writeDatagram(data, broadcastAddr, DISCOVERY_PORT + offset);
+        }
     }
 }
 
@@ -135,6 +134,9 @@ void NetworkDiscovery::readPendingDatagrams()
         if (qAbs(now - msg.timestamp) > DISCOVERY_TIMESTAMP_WINDOW) continue;
         
         if (msg.type == DiscoveryType::ANNOUNCE) {
+            if (m_peerTokens.size() > 1000) {
+                m_peerTokens.clear();
+            }
             m_peerTokens[msg.peerId] = qMakePair(msg.token, datagram.senderAddress());
             
             QString name = msg.displayName.left(MAX_DISPLAY_NAME_LENGTH);
@@ -157,9 +159,7 @@ void NetworkDiscovery::readPendingDatagrams()
 QByteArray NetworkDiscovery::generateToken() const
 {
     QByteArray token(16, '\0');
-    for (int i = 0; i < 16; ++i) {
-        token[i] = static_cast<char>(QRandomGenerator::global()->bounded(256));
-    }
+    QRandomGenerator::system()->fillRange(reinterpret_cast<quint32*>(token.data()), token.size() / sizeof(quint32));
     return token;
 }
 

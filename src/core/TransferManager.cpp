@@ -21,7 +21,7 @@ TransferManager::TransferManager(PeerManager* peerManager, QObject* parent)
     }
     
     // Load download path from settings (set by installer or user)
-    QString defaultPath = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation) + "/Witra Downloads";
+    QString defaultPath = QDir::homePath() + "/Downloads/Witra";
     m_downloadPath = settings.value("DownloadPath", defaultPath).toString();
     
     // Fallback if path is empty
@@ -38,8 +38,8 @@ TransferManager::TransferManager(PeerManager* peerManager, QObject* parent)
             this, &TransferManager::error);
     connect(m_server, &FileTransferServer::newConnection,
             this, [this](TransferSession* session) {
-        connect(session, &TransferSession::disconnected,
-                this, [this, session]() { onSessionDisconnected(session); });
+        // M2: Removed duplicate disconnect connection since setupSessionConnections handles it
+        setupSessionConnections(session);
     });
     
     // Client signals
@@ -64,6 +64,7 @@ void TransferManager::start()
     m_client->setMaxFileSize(m_maxFileSize);
     
     if (!m_server->start()) {
+        emit error(tr("Failed to start transfer server"));
         return;
     }
     
@@ -77,6 +78,16 @@ void TransferManager::stop()
     if (!m_running) return;
     
     m_server->stop();
+    m_client->disconnect(); // or handle properly
+    
+    // M18: clean up transfers
+    for (TransferItem* item : m_transfers) {
+        item->deleteLater();
+    }
+    m_transfers.clear();
+    m_pendingRequests.clear();
+    m_transferSessions.clear();
+    
     m_running = false;
 }
 
@@ -91,6 +102,8 @@ void TransferManager::setDownloadPath(const QString& path)
 void TransferManager::setMaxFileSize(qint64 size)
 {
     m_maxFileSize = size;
+    m_server->setMaxFileSize(size);
+    m_client->setMaxFileSize(size);
 }
 
 void TransferManager::sendConnectionRequest(Peer* peer)
@@ -275,6 +288,15 @@ void TransferManager::cancelTransfer(const QString& transferId)
     }
 }
 
+void TransferManager::removeTransfer(const QString& transferId)
+{
+    TransferItem* item = m_transfers.take(transferId);
+    if (item) {
+        emit transferRemoved(transferId);
+        item->deleteLater();
+    }
+}
+
 void TransferManager::onConnectionRequestReceived(TransferSession* session, 
                                                    const QString& senderName)
 {
@@ -316,8 +338,23 @@ void TransferManager::onOutgoingConnectionReady(TransferSession* session)
     });
 }
 
-void TransferManager::onOutgoingConnectionFailed(const QString& error)
+void TransferManager::onOutgoingConnectionFailed(TransferSession* session, const QString& error)
 {
+    if (session) {
+        m_pendingRequests.remove(session->peerId());
+        for (auto it = m_transferSessions.begin(); it != m_transferSessions.end(); ) {
+            if (it.value() == session) {
+                it = m_transferSessions.erase(it);
+            } else {
+                ++it;
+            }
+        }
+        
+        Peer* peer = m_peerManager->peer(session->peerId());
+        if (peer && peer->state() != Peer::ConnectionState::Connected) {
+            peer->setState(Peer::ConnectionState::Discovered);
+        }
+    }
     emit this->error(tr("Connection failed: %1").arg(error));
 }
 
@@ -406,8 +443,8 @@ TransferSession* TransferManager::getOrCreateSession(Peer* peer)
         }
     }
     
-    // Create new connection
-    return m_client->connectToPeer(peer->address(), peer->port());
+    // H13: Don't create unauthenticated sessions on the fly
+    return nullptr;
 }
 
 void TransferManager::onSessionDisconnected(TransferSession* session)

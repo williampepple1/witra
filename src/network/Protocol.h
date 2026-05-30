@@ -85,7 +85,12 @@ struct DiscoveryMessage {
             msg.peerId = obj["peerId"].toString();
             msg.displayName = obj["displayName"].toString();
             msg.deviceName = obj["deviceName"].toString();
-            msg.transferPort = static_cast<quint16>(obj["transferPort"].toInt());
+            int port = obj["transferPort"].toInt();
+            if (port > 0 && port <= 65535) {
+                msg.transferPort = static_cast<quint16>(port);
+            } else {
+                msg.transferPort = 0;
+            }
             msg.timestamp = obj["timestamp"].toVariant().toLongLong();
             msg.token = QByteArray::fromHex(obj["token"].toString().toLatin1());
         }

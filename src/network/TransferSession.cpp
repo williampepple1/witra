@@ -24,7 +24,9 @@ TransferSession::TransferSession(QTcpSocket* socket, QObject* parent)
     , m_sendTotalSize(0)
     , m_sendBytesSent(0)
     , m_maxFileSize(MAX_FILE_SIZE)
+    , m_pendingTotalFiles(0)
     , m_pendingFileIndex(0)
+    , m_sendHash(QCryptographicHash::Sha256)
     , m_runningHash(QCryptographicHash::Sha256)
 {
     if (m_socket) {
@@ -94,6 +96,7 @@ void TransferSession::sendFile(const QString& filePath, const QString& transferI
     }
     
     if (m_sendFile) {
+        m_sendQueue.enqueue({filePath, transferId, relativePath, totalFiles, currentFile});
         return;
     }
     
@@ -102,6 +105,13 @@ void TransferSession::sendFile(const QString& filePath, const QString& transferI
         emit transferFailed(transferId, tr("Cannot open file: %1").arg(filePath));
         delete m_sendFile;
         m_sendFile = nullptr;
+        
+        if (!m_sendQueue.isEmpty()) {
+            QueuedFile next = m_sendQueue.dequeue();
+            QTimer::singleShot(0, this, [this, next]() {
+                sendFile(next.filePath, next.transferId, next.relativePath, next.totalFiles, next.currentFile);
+            });
+        }
         return;
     }
     
@@ -109,9 +119,7 @@ void TransferSession::sendFile(const QString& filePath, const QString& transferI
     m_sendTotalSize = fileInfo.size();
     m_sendBytesSent = 0;
     
-    QCryptographicHash fileHash(QCryptographicHash::Sha256);
-    fileHash.addData(m_sendFile);
-    m_sendFile->reset();
+    m_sendHash.reset();
     
     TransferHeader header;
     header.type = TransferType::FILE_HEADER;
@@ -121,7 +129,6 @@ void TransferSession::sendFile(const QString& filePath, const QString& transferI
     header.fileSize = m_sendTotalSize;
     header.totalFiles = totalFiles;
     header.currentFileIndex = currentFile;
-    header.fileHash = fileHash.result();
     
     sendHeader(header);
     m_state = State::Transferring;
@@ -159,6 +166,7 @@ void TransferSession::sendFolder(const QString& folderPath, const QString& trans
     m_pendingSendFiles = files;
     m_pendingFolderTransferId = transferId;
     m_pendingFolderBasePath = folderPath;
+    m_pendingTotalFiles = files.size();
     m_pendingFileIndex = 0;
     
     sendNextQueuedFile();
@@ -176,7 +184,7 @@ void TransferSession::sendNextQueuedFile()
                           QDir(m_pendingFolderBasePath).relativeFilePath(filePath);
     
     sendFile(filePath, m_pendingFolderTransferId, relativePath,
-             m_pendingSendFiles.size() + 1, m_pendingFileIndex);
+             m_pendingTotalFiles, m_pendingFileIndex);
 }
 
 void TransferSession::cancelTransfer()
@@ -243,13 +251,20 @@ void TransferSession::sendNextChunk()
         TransferHeader header;
         header.type = TransferType::FILE_COMPLETE;
         header.transferId = m_sendTransferId;
+        header.fileHash = m_sendHash.result();
         sendHeader(header);
         
         m_sendFile->close();
         delete m_sendFile;
         m_sendFile = nullptr;
         
-        if (!m_pendingSendFiles.isEmpty()) {
+        if (!m_sendQueue.isEmpty()) {
+            QueuedFile next = m_sendQueue.dequeue();
+            QTimer::singleShot(0, this, [this, next]() {
+                sendFile(next.filePath, next.transferId, next.relativePath, next.totalFiles, next.currentFile);
+            });
+            return;
+        } else if (!m_pendingSendFiles.isEmpty()) {
             QTimer::singleShot(0, this, &TransferSession::sendNextQueuedFile);
             return;
         }
@@ -261,16 +276,31 @@ void TransferSession::sendNextChunk()
     
     writeMessage(chunk, false);
     m_sendBytesSent += chunk.size();
+    m_sendHash.addData(chunk);
     
     emit transferProgress(m_sendTransferId, m_sendBytesSent, m_sendTotalSize);
     
-    // Continue sending
-    QTimer::singleShot(0, this, &TransferSession::sendNextChunk);
+    if (m_socket->bytesToWrite() > 1024 * 1024) { // 1MB
+        auto connection = std::make_shared<QMetaObject::Connection>();
+        *connection = connect(m_socket, &QTcpSocket::bytesWritten, this, [this, connection](qint64) {
+            if (m_socket->bytesToWrite() < 512 * 1024) {
+                disconnect(*connection);
+                sendNextChunk();
+            }
+        });
+    } else {
+        QTimer::singleShot(0, this, &TransferSession::sendNextChunk);
+    }
 }
 
 void TransferSession::onReadyRead()
 {
     m_buffer.append(m_socket->readAll());
+    if (m_buffer.size() > 50 * 1024 * 1024) { // 50MB max
+        emit error(tr("Buffer size exceeded limit"));
+        disconnectFromPeer();
+        return;
+    }
     
     while (m_buffer.size() >= 4) {
         // Read message size
@@ -343,8 +373,8 @@ void TransferSession::handleConnectionAccept(const TransferHeader& header)
 
 QString TransferSession::generateVerificationCode() const
 {
-    int code = QRandomGenerator::global()->bounded(100000, 999999);
-    return QString::number(code);
+    int code = QRandomGenerator::global()->bounded(0, 1000000);
+    return QString::number(code).rightJustified(6, '0');
 }
 
 void TransferSession::startServerEncryption(const QSslConfiguration& config)
@@ -379,6 +409,10 @@ void TransferSession::handleFileHeader(const TransferHeader& header)
         emit transferFailed(m_currentTransferId,
                            tr("File exceeds maximum size limit (%1 GB)")
                            .arg(m_maxFileSize / (1024.0 * 1024.0 * 1024.0), 0, 'f', 1));
+        TransferHeader cancelHeader;
+        cancelHeader.type = TransferType::TRANSFER_CANCEL;
+        cancelHeader.transferId = m_currentTransferId;
+        sendHeader(cancelHeader);
         return;
     }
     
@@ -394,30 +428,37 @@ void TransferSession::handleFileHeader(const TransferHeader& header)
     }
     
     // Handle relative path for folders
+    QString cleanRelPath = QDir::cleanPath(m_currentRelativePath);
+    QString cleanFileName = QDir::cleanPath(m_currentFileName);
+    
+    if (cleanRelPath.startsWith("..") || QDir::isAbsolutePath(cleanRelPath) ||
+        cleanFileName.startsWith("..") || QDir::isAbsolutePath(cleanFileName) ||
+        cleanFileName.contains("/")) {
+        emit transferFailed(m_currentTransferId,
+                           tr("Security: invalid file path from peer"));
+        return;
+    }
+    
     QString filePath;
+    QString subDir = ".";
     if (m_currentRelativePath.contains('/')) {
-        QString cleanPath = QDir::cleanPath(m_currentRelativePath);
-        if (cleanPath.startsWith("..") || QDir::isAbsolutePath(cleanPath)) {
-            emit transferFailed(m_currentTransferId,
-                               tr("Security: invalid file path from peer"));
-            return;
-        }
-        QString subDir = cleanPath.left(cleanPath.lastIndexOf('/'));
+        subDir = cleanRelPath.left(cleanRelPath.lastIndexOf('/'));
         destDir.mkpath(subDir);
-        filePath = destDir.absoluteFilePath(cleanPath);
+        filePath = destDir.absoluteFilePath(cleanRelPath);
     } else {
-        filePath = destDir.absoluteFilePath(m_currentFileName);
+        filePath = destDir.absoluteFilePath(cleanFileName);
     }
     
     // Handle file name conflicts
     QFileInfo fileInfo(filePath);
     int counter = 1;
+    QDir targetDir = fileInfo.absoluteDir();
     while (QFile::exists(filePath)) {
-        filePath = destDir.absoluteFilePath(
-            QString("%1 (%2).%3").arg(fileInfo.baseName())
-                                 .arg(counter++)
-                                 .arg(fileInfo.suffix())
-        );
+        QString newName = QString("%1 (%2)").arg(fileInfo.baseName()).arg(counter++);
+        if (!fileInfo.suffix().isEmpty()) {
+            newName += "." + fileInfo.suffix();
+        }
+        filePath = targetDir.absoluteFilePath(newName);
     }
     
     if (m_currentFile) {
@@ -445,6 +486,15 @@ void TransferSession::handleFileData(const QByteArray& data)
         return;
     }
     
+    if (m_currentBytesReceived + data.size() > m_currentFileSize) {
+        emit transferFailed(m_currentTransferId, tr("Received more data than expected"));
+        m_currentFile->close();
+        m_currentFile->remove();
+        delete m_currentFile;
+        m_currentFile = nullptr;
+        return;
+    }
+    
     m_currentFile->write(data);
     m_currentBytesReceived += data.size();
     m_runningHash.addData(data);
@@ -454,9 +504,9 @@ void TransferSession::handleFileData(const QByteArray& data)
 
 void TransferSession::handleFileComplete(const TransferHeader& header)
 {
-    Q_UNUSED(header)
-    
     if (m_currentFile) {
+        m_expectedHash = header.fileHash;
+        
         QString partPath = m_currentFile->fileName();
         m_currentFile->close();
         
@@ -483,7 +533,10 @@ void TransferSession::handleFileComplete(const TransferHeader& header)
         delete m_currentFile;
         m_currentFile = nullptr;
         
-        QString finalPath = partPath.left(partPath.length() - 5);
+        QString finalPath = partPath;
+        if (partPath.endsWith(".part")) {
+            finalPath = partPath.chopped(5);
+        }
         if (!QFile::rename(partPath, finalPath)) {
             QFile::remove(partPath);
             emit transferFailed(m_currentTransferId,

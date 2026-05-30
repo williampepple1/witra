@@ -281,6 +281,7 @@ void LobbyPage::onPeerAdded(Peer* peer)
     // Set pending files if any
     if (!m_pendingFiles.isEmpty()) {
         widget->setPendingFiles(m_pendingFiles);
+        m_pendingFiles.clear(); // Fix H11
     }
     
     // Hide empty label

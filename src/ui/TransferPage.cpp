@@ -91,8 +91,7 @@ void TransferPage::setupUi()
     statsLayout->addStretch(1);
     
     // Update stats periodically
-    QTimer* statsTimer = new QTimer(this);
-    connect(statsTimer, &QTimer::timeout, this, [this, activeValue, completedValue, failedValue]() {
+    auto updateStats = [this, activeValue, completedValue, failedValue]() {
         int active = 0, completed = 0, failed = 0;
         
         for (TransferItem* item : m_transferManager->transfers()) {
@@ -114,8 +113,12 @@ void TransferPage::setupUi()
         if (activeValue) activeValue->setText(QString::number(active));
         if (completedValue) completedValue->setText(QString::number(completed));
         if (failedValue) failedValue->setText(QString::number(failed));
-    });
-    statsTimer->start(1000);
+    };
+    
+    connect(m_transferManager, &TransferManager::transferAdded, this, [this, updateStats](TransferItem*) { updateStats(); });
+    connect(m_transferManager, &TransferManager::transferUpdated, this, [this, updateStats](TransferItem*) { updateStats(); });
+    connect(m_transferManager, &TransferManager::transferRemoved, this, [this, updateStats](const QString&) { updateStats(); });
+    updateStats();
     
     mainLayout->addLayout(statsLayout);
     
@@ -269,7 +272,7 @@ void TransferPage::clearCompleted()
     }
     
     for (const QString& id : toRemove) {
-        onTransferRemoved(id);
+        m_transferManager->removeTransfer(id);
     }
 }
 

@@ -8,7 +8,7 @@ namespace Witra {
 
 FileTransferServer::FileTransferServer(QObject* parent)
     : QObject(parent)
-    , m_server(new QTcpServer(this))
+    , m_server(new CustomTcpServer(this))
     , m_connectionCount(0)
     , m_maxFileSize(MAX_FILE_SIZE)
 {
@@ -30,8 +30,8 @@ FileTransferServer::FileTransferServer(QObject* parent)
     m_downloadPath = QDir::homePath() + "/Downloads/Witra";
     QDir().mkpath(m_downloadPath);
     
-    connect(m_server, &QTcpServer::newConnection, 
-            this, &FileTransferServer::onNewConnection);
+    connect(m_server, &CustomTcpServer::incomingSocketDescriptor, 
+            this, &FileTransferServer::handleIncomingConnection);
 }
 
 FileTransferServer::~FileTransferServer()
@@ -83,55 +83,48 @@ TransferSession* FileTransferServer::session(const QString& sessionId) const
     return m_sessions.value(sessionId, nullptr);
 }
 
-void FileTransferServer::onNewConnection()
+void FileTransferServer::handleIncomingConnection(qintptr socketDescriptor)
 {
-    while (m_server->hasPendingConnections()) {
-        if (m_connectionCount >= MAX_CONNECTIONS) {
-            QTcpSocket* rejected = m_server->nextPendingConnection();
-            rejected->disconnectFromHost();
-            rejected->deleteLater();
-            continue;
-        }
-        
-        QTcpSocket* rawSocket = m_server->nextPendingConnection();
-        QTcpSocket* sessionSocket;
-        
-        if (QSslSocket::supportsSsl() && !m_sslConfig.isNull()) {
-            QSslSocket* sslSocket = new QSslSocket(this);
-            sslSocket->setSocketDescriptor(rawSocket->socketDescriptor());
-            sslSocket->setSslConfiguration(m_sslConfig);
-            connect(sslSocket, &QSslSocket::sslErrors, sslSocket, [sslSocket](const QList<QSslError>&) {
-                sslSocket->ignoreSslErrors();
-            });
-            sslSocket->startServerEncryption();
-            sessionSocket = sslSocket;
-        } else {
-            sessionSocket = rawSocket;
-        }
-        
-        if (sessionSocket != rawSocket) {
-            rawSocket->abort();
-            rawSocket->deleteLater();
-        }
-        
-        TransferSession* session = new TransferSession(sessionSocket, this);
-        session->setIsIncoming(true);
-        session->setDownloadPath(m_downloadPath);
-        session->setMaxFileSize(m_maxFileSize);
-        
-        m_sessions[session->sessionId()] = session;
-        m_connectionCount++;
-        
-        connect(session, &TransferSession::disconnected,
-                this, &FileTransferServer::onSessionDisconnected);
-        
-        connect(session, &TransferSession::connectionRequestReceived,
-                this, [this, session](const QString& senderName, const QString&) {
-            emit connectionRequestReceived(session, senderName);
-        });
-        
-        emit newConnection(session);
+    if (m_connectionCount >= MAX_CONNECTIONS) {
+        QTcpSocket rejected;
+        rejected.setSocketDescriptor(socketDescriptor);
+        rejected.disconnectFromHost();
+        return;
     }
+    
+    QTcpSocket* sessionSocket = nullptr;
+    
+    if (QSslSocket::supportsSsl() && !m_sslConfig.isNull()) {
+        QSslSocket* sslSocket = new QSslSocket(this);
+        sslSocket->setSocketDescriptor(socketDescriptor);
+        sslSocket->setSslConfiguration(m_sslConfig);
+        connect(sslSocket, &QSslSocket::sslErrors, sslSocket, [sslSocket](const QList<QSslError>&) {
+            sslSocket->ignoreSslErrors();
+        });
+        sslSocket->startServerEncryption();
+        sessionSocket = sslSocket;
+    } else {
+        sessionSocket = new QTcpSocket(this);
+        sessionSocket->setSocketDescriptor(socketDescriptor);
+    }
+    
+    TransferSession* session = new TransferSession(sessionSocket, this);
+    session->setIsIncoming(true);
+    session->setDownloadPath(m_downloadPath);
+    session->setMaxFileSize(m_maxFileSize);
+    
+    m_sessions[session->sessionId()] = session;
+    m_connectionCount++;
+    
+    connect(session, &TransferSession::disconnected,
+            this, &FileTransferServer::onSessionDisconnected);
+    
+    connect(session, &TransferSession::connectionRequestReceived,
+            this, [this, session](const QString& senderName, const QString&) {
+        emit connectionRequestReceived(session, senderName);
+    });
+    
+    emit newConnection(session);
 }
 
 void FileTransferServer::onSessionDisconnected()
@@ -140,7 +133,7 @@ void FileTransferServer::onSessionDisconnected()
     if (session) {
         QString sessionId = session->sessionId();
         m_sessions.remove(sessionId);
-        m_connectionCount--;
+        if (m_connectionCount > 0) m_connectionCount--;
         emit sessionClosed(sessionId);
         session->deleteLater();
     }

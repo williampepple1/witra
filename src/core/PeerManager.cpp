@@ -59,14 +59,14 @@ void PeerManager::stop()
 
 void PeerManager::setDisplayName(const QString& name)
 {
-    m_displayName = name;
+    m_displayName = name.left(MAX_DISPLAY_NAME_LENGTH);
     
     // Save to settings
     QSettings settings;
-    settings.setValue("user/displayName", name);
+    settings.setValue("user/displayName", m_displayName);
     
     // Update discovery
-    m_discovery->setDisplayName(name);
+    m_discovery->setDisplayName(m_displayName);
 }
 
 void PeerManager::setTransferPort(quint16 port)
@@ -106,8 +106,11 @@ void PeerManager::cleanupTimedOutPeers()
     QStringList timedOut;
     
     for (auto it = m_peers.begin(); it != m_peers.end(); ++it) {
-        if (it.value()->hasTimedOut(PEER_TIMEOUT)) {
-            timedOut.append(it.key());
+        Peer* peer = it.value();
+        if (peer->state() == Peer::ConnectionState::Discovered) {
+            if (peer->hasTimedOut(PEER_TIMEOUT)) {
+                timedOut.append(it.key());
+            }
         }
     }
     

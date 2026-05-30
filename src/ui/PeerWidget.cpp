@@ -32,10 +32,10 @@ PeerWidget::PeerWidget(Peer* peer, TransferManager* transferManager, QWidget* pa
     
     connect(m_peer, &Peer::stateChanged, this, &PeerWidget::updateDisplay);
     
-    // Timer to update disconnect button state based on active transfers
-    m_disconnectUpdateTimer = new QTimer(this);
-    connect(m_disconnectUpdateTimer, &QTimer::timeout, this, &PeerWidget::updateDisconnectButton);
-    m_disconnectUpdateTimer->start(1000);
+    // L2: Replace timer with signal connections
+    connect(m_transferManager, &TransferManager::transferAdded, this, [this](TransferItem*) { updateDisconnectButton(); });
+    connect(m_transferManager, &TransferManager::transferUpdated, this, [this](TransferItem*) { updateDisconnectButton(); });
+    connect(m_transferManager, &TransferManager::transferRemoved, this, [this](const QString&) { updateDisconnectButton(); });
 }
 
 void PeerWidget::setupUi()
@@ -92,16 +92,7 @@ void PeerWidget::setupUi()
     connect(m_connectButton, &QPushButton::clicked, this, &PeerWidget::onConnectClicked);
     actionLayout->addWidget(m_connectButton);
     
-    // Accept/Reject buttons (for incoming requests)
-    m_acceptButton = new QPushButton("Accept");
-    m_acceptButton->setObjectName("acceptButton");
-    connect(m_acceptButton, &QPushButton::clicked, this, &PeerWidget::onAcceptClicked);
-    actionLayout->addWidget(m_acceptButton);
-    
-    m_rejectButton = new QPushButton("Reject");
-    m_rejectButton->setObjectName("rejectButton");
-    connect(m_rejectButton, &QPushButton::clicked, this, &PeerWidget::onRejectClicked);
-    actionLayout->addWidget(m_rejectButton);
+    // H10: Removed non-functional Accept/Reject buttons (handled by ConnectionDialog)
     
     // Send buttons (when connected)
     m_sendFilesButton = new QPushButton("Send Files");
@@ -292,8 +283,7 @@ void PeerWidget::updateDisplay()
     Peer::ConnectionState state = m_peer->state();
     
     m_connectButton->setVisible(state == Peer::ConnectionState::Discovered);
-    m_acceptButton->setVisible(state == Peer::ConnectionState::RequestReceived);
-    m_rejectButton->setVisible(state == Peer::ConnectionState::RequestReceived);
+    // H10: Removed Accept/Reject buttons visibility
     m_sendFilesButton->setVisible(state == Peer::ConnectionState::Connected);
     m_sendFolderButton->setVisible(state == Peer::ConnectionState::Connected);
     m_disconnectButton->setVisible(state == Peer::ConnectionState::Connected);
@@ -347,13 +337,10 @@ void PeerWidget::onConnectClicked()
 
 void PeerWidget::onAcceptClicked()
 {
-    // Find the session for this peer
-    // This is handled by MainWindow's connection dialog
 }
 
 void PeerWidget::onRejectClicked()
 {
-    // Handled by MainWindow's connection dialog
 }
 
 void PeerWidget::onSendFilesClicked()

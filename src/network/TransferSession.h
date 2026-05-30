@@ -8,6 +8,7 @@
 #include <QFile>
 #include <QDataStream>
 #include <QCryptographicHash>
+#include <QQueue>
 #include "Protocol.h"
 
 namespace Witra {
@@ -132,11 +133,22 @@ private:
     QString m_sendTransferId;
     qint64 m_sendTotalSize;
     qint64 m_sendBytesSent;
+    QCryptographicHash m_sendHash;
+    
+    struct QueuedFile {
+        QString filePath;
+        QString transferId;
+        QString relativePath;
+        qint64 totalFiles;
+        qint64 currentFile;
+    };
+    QQueue<QueuedFile> m_sendQueue;
     
     // Folder send queue
     QStringList m_pendingSendFiles;
     QString m_pendingFolderTransferId;
     QString m_pendingFolderBasePath;
+    qint64 m_pendingTotalFiles;
     qint64 m_pendingFileIndex;
 };
 

@@ -42,6 +42,7 @@ public:
     void sendFiles(Peer* peer, const QStringList& filePaths);
     void sendFolder(Peer* peer, const QString& folderPath);
     void cancelTransfer(const QString& transferId);
+    void removeTransfer(const QString& transferId);
     
 signals:
     void connectionRequestReceived(TransferSession* session, const QString& senderName);
@@ -56,7 +57,7 @@ signals:
 private slots:
     void onConnectionRequestReceived(TransferSession* session, const QString& senderName);
     void onOutgoingConnectionReady(TransferSession* session);
-    void onOutgoingConnectionFailed(const QString& error);
+    void onOutgoingConnectionFailed(TransferSession* session, const QString& error);
     void onSessionDisconnected(TransferSession* session);
     void onSessionTransferStarted(const QString& transferId, const QString& fileName,
                                   qint64 totalSize, qint64 totalFiles);

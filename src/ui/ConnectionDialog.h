@@ -16,9 +16,7 @@ public:
     
     QString verificationCode() const { return m_verificationCode; }
     
-signals:
-    void accepted();
-    void rejected();
+    // Removed shadowed signals: accepted(), rejected()
     
 private:
     void setupUi();

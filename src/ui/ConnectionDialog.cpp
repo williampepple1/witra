@@ -80,17 +80,11 @@ void ConnectionDialog::setupUi()
     
     QPushButton* rejectBtn = new QPushButton("Decline");
     rejectBtn->setObjectName("declineButton");
-    connect(rejectBtn, &QPushButton::clicked, this, [this]() {
-        emit rejected();
-        close();
-    });
+    connect(rejectBtn, &QPushButton::clicked, this, &QDialog::reject);
     
     QPushButton* acceptBtn = new QPushButton("Accept");
     acceptBtn->setObjectName("acceptButton");
-    connect(acceptBtn, &QPushButton::clicked, this, [this]() {
-        emit accepted();
-        close();
-    });
+    connect(acceptBtn, &QPushButton::clicked, this, &QDialog::accept);
     
     buttonLayout->addWidget(rejectBtn);
     buttonLayout->addWidget(acceptBtn);
