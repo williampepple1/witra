@@ -16,6 +16,7 @@
 #include <QApplication>
 #include <QSettings>
 #include <QScreen>
+#include <QPointer>
 
 namespace Witra {
 
@@ -367,10 +368,15 @@ void MainWindow::onConnectionRequestReceived(TransferSession* session,
 {
     ConnectionDialog* dialog = new ConnectionDialog(senderName, 
                                                      session->verificationCode(), this);
-    dialog->setAttribute(Qt::WA_DeleteOnClose); // Fix H9
     
-    connect(dialog, &ConnectionDialog::accepted, this, [this, session]() {
-        m_transferManager->acceptConnectionRequest(session);
+    QPointer<TransferSession> weakSession(session);
+    
+    connect(dialog, &ConnectionDialog::accepted, this, [this, weakSession]() {
+        if (weakSession) m_transferManager->acceptConnectionRequest(weakSession);
+    });
+    
+    connect(dialog, &ConnectionDialog::rejected, this, [this, weakSession]() {
+        if (weakSession) m_transferManager->rejectConnectionRequest(weakSession);
     });
     
     connect(dialog, &ConnectionDialog::rejected, this, [this, session]() {

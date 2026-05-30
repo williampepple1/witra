@@ -98,7 +98,7 @@ struct DiscoveryMessage {
     }
     
     bool isValid() const {
-        return !peerId.isEmpty() && !type.isEmpty();
+        return !peerId.isEmpty() && !type.isEmpty() && transferPort > 0;
     }
 };
 

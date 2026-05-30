@@ -77,17 +77,12 @@ void TransferManager::stop()
 {
     if (!m_running) return;
     
-    m_server->stop();
-    m_client->disconnect(); // or handle properly
-    
-    // M18: clean up transfers
-    for (TransferItem* item : m_transfers) {
-        item->deleteLater();
+    for (auto it = m_pendingRequests.begin(); it != m_pendingRequests.end(); ++it) {
+        it.value()->disconnectFromPeer();
     }
-    m_transfers.clear();
     m_pendingRequests.clear();
-    m_transferSessions.clear();
     
+    m_server->stop();
     m_running = false;
 }
 
@@ -393,6 +388,7 @@ void TransferManager::onSessionTransferStarted(const QString& transferId,
         item->setStatus(TransferItem::Status::InProgress);
         
         m_transfers[transferId] = item;
+        m_transferSessions[transferId] = session;
         emit transferAdded(item);
     }
 }

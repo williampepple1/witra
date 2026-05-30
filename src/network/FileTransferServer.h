@@ -59,7 +59,6 @@ private:
     QMap<QString, TransferSession*> m_sessions;
     QString m_downloadPath;
     qint64 m_maxFileSize;
-    int m_connectionCount;
     QSslConfiguration m_sslConfig;
 };
 

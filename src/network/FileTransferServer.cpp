@@ -9,7 +9,6 @@ namespace Witra {
 FileTransferServer::FileTransferServer(QObject* parent)
     : QObject(parent)
     , m_server(new CustomTcpServer(this))
-    , m_connectionCount(0)
     , m_maxFileSize(MAX_FILE_SIZE)
 {
     QFile certFile(":/certs/cert.pem");
@@ -59,7 +58,6 @@ bool FileTransferServer::start(quint16 port)
 void FileTransferServer::stop()
 {
     m_server->close();
-    m_connectionCount = 0;
     
     for (TransferSession* session : m_sessions.values()) {
         session->disconnectFromPeer();
@@ -85,7 +83,7 @@ TransferSession* FileTransferServer::session(const QString& sessionId) const
 
 void FileTransferServer::handleIncomingConnection(qintptr socketDescriptor)
 {
-    if (m_connectionCount >= MAX_CONNECTIONS) {
+    if (m_sessions.size() >= MAX_CONNECTIONS) {
         QTcpSocket rejected;
         rejected.setSocketDescriptor(socketDescriptor);
         rejected.disconnectFromHost();
@@ -114,7 +112,6 @@ void FileTransferServer::handleIncomingConnection(qintptr socketDescriptor)
     session->setMaxFileSize(m_maxFileSize);
     
     m_sessions[session->sessionId()] = session;
-    m_connectionCount++;
     
     connect(session, &TransferSession::disconnected,
             this, &FileTransferServer::onSessionDisconnected);
@@ -133,7 +130,6 @@ void FileTransferServer::onSessionDisconnected()
     if (session) {
         QString sessionId = session->sessionId();
         m_sessions.remove(sessionId);
-        if (m_connectionCount > 0) m_connectionCount--;
         emit sessionClosed(sessionId);
         session->deleteLater();
     }

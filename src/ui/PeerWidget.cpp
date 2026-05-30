@@ -24,15 +24,12 @@ PeerWidget::PeerWidget(Peer* peer, TransferManager* transferManager, QWidget* pa
     , m_sendFolderButton(nullptr)
     , m_disconnectButton(nullptr)
     , m_actionContainer(nullptr)
-    , m_disconnectUpdateTimer(nullptr)
 {
     setupUi();
     applyStyles();
     updateDisplay();
     
     connect(m_peer, &Peer::stateChanged, this, &PeerWidget::updateDisplay);
-    
-    // L2: Replace timer with signal connections
     connect(m_transferManager, &TransferManager::transferAdded, this, [this](TransferItem*) { updateDisconnectButton(); });
     connect(m_transferManager, &TransferManager::transferUpdated, this, [this](TransferItem*) { updateDisconnectButton(); });
     connect(m_transferManager, &TransferManager::transferRemoved, this, [this](const QString&) { updateDisconnectButton(); });

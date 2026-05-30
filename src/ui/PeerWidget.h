@@ -50,7 +50,6 @@ private:
     QPushButton* m_disconnectButton;
     
     QWidget* m_actionContainer;
-    QTimer* m_disconnectUpdateTimer;
     QStringList m_pendingFiles;
 };
 
