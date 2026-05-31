@@ -87,6 +87,7 @@ void FileTransferServer::handleIncomingConnection(qintptr socketDescriptor)
         QTcpSocket rejected;
         rejected.setSocketDescriptor(socketDescriptor);
         rejected.disconnectFromHost();
+        emit error(tr("Connection rejected: maximum connections (%1) reached").arg(MAX_CONNECTIONS));
         return;
     }
     

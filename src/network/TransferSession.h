@@ -9,6 +9,7 @@
 #include <QDataStream>
 #include <QCryptographicHash>
 #include <QQueue>
+#include <QTimer>
 #include "Protocol.h"
 
 namespace Witra {
@@ -86,6 +87,7 @@ private slots:
     void onSocketError(QAbstractSocket::SocketError socketError);
     void sendNextChunk();
     void sendNextQueuedFile();
+    void onKeepaliveTimer();
     
 private:
     void processMessage(const QByteArray& message);
@@ -96,6 +98,10 @@ private:
     void handleFileData(const QByteArray& data);
     void handleFileComplete(const TransferHeader& header);
     void handleTransferCancel(const TransferHeader& header);
+    void handleFolderHeader(const TransferHeader& header);
+    void handlePing(const TransferHeader& header);
+    void handlePong();
+    void sendPing();
     QString generateVerificationCode() const;
     
     void sendHeader(const TransferHeader& header);
@@ -126,14 +132,14 @@ private:
     qint64 m_totalFiles;
     qint64 m_currentFileIndex;
     QByteArray m_expectedHash;
-    QCryptographicHash m_runningHash;
+    QCryptographicHash m_runningHash{QCryptographicHash::Sha256};
     
     // Current sending file
     QFile* m_sendFile;
     QString m_sendTransferId;
     qint64 m_sendTotalSize;
     qint64 m_sendBytesSent;
-    QCryptographicHash m_sendHash;
+    QCryptographicHash m_sendHash{QCryptographicHash::Sha256};
     
     struct QueuedFile {
         QString filePath;
@@ -150,6 +156,10 @@ private:
     QString m_pendingFolderBasePath;
     qint64 m_pendingTotalFiles;
     qint64 m_pendingFileIndex;
+    
+    // Keepalive
+    QTimer* m_keepaliveTimer;
+    qint64 m_lastActivity;
 };
 
 } // namespace Witra

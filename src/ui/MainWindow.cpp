@@ -379,10 +379,6 @@ void MainWindow::onConnectionRequestReceived(TransferSession* session,
         if (weakSession) m_transferManager->rejectConnectionRequest(weakSession);
     });
     
-    connect(dialog, &ConnectionDialog::rejected, this, [this, session]() {
-        m_transferManager->rejectConnectionRequest(session);
-    });
-    
     dialog->show();
     
     // Show notification

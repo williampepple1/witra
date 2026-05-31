@@ -83,6 +83,12 @@ void TransferManager::stop()
     m_pendingRequests.clear();
     
     m_server->stop();
+    
+    for (TransferSession* session : m_client->sessions()) {
+        session->disconnectFromPeer();
+    }
+    
+    m_transferSessions.clear();
     m_running = false;
 }
 
@@ -99,6 +105,16 @@ void TransferManager::setMaxFileSize(qint64 size)
     m_maxFileSize = size;
     m_server->setMaxFileSize(size);
     m_client->setMaxFileSize(size);
+}
+
+void TransferManager::removeTransfer(const QString& transferId)
+{
+    m_transferSessions.remove(transferId);
+    TransferItem* item = m_transfers.take(transferId);
+    if (item) {
+        emit transferRemoved(transferId);
+        item->deleteLater();
+    }
 }
 
 void TransferManager::sendConnectionRequest(Peer* peer)
@@ -224,8 +240,7 @@ void TransferManager::sendFiles(Peer* peer, const QStringList& filePaths)
             
             m_transferSessions[transferId] = session;
             
-            session->sendFile(filePath, transferId, QString(), 
-                             filePaths.size(), i + 1);
+            session->sendFile(filePath, transferId, QString(), 1, 1);
         }
     }
 }
@@ -280,15 +295,6 @@ void TransferManager::cancelTransfer(const QString& transferId)
     TransferSession* target = m_transferSessions.value(transferId, nullptr);
     if (target) {
         target->cancelTransfer();
-    }
-}
-
-void TransferManager::removeTransfer(const QString& transferId)
-{
-    TransferItem* item = m_transfers.take(transferId);
-    if (item) {
-        emit transferRemoved(transferId);
-        item->deleteLater();
     }
 }
 

@@ -4,6 +4,7 @@
 #include <QFileInfo>
 #include <QTimer>
 #include <QRandomGenerator>
+#include <QDateTime>
 
 namespace Witra {
 
@@ -23,11 +24,9 @@ TransferSession::TransferSession(QTcpSocket* socket, QObject* parent)
     , m_sendFile(nullptr)
     , m_sendTotalSize(0)
     , m_sendBytesSent(0)
-    , m_maxFileSize(MAX_FILE_SIZE)
-    , m_pendingTotalFiles(0)
     , m_pendingFileIndex(0)
-    , m_sendHash(QCryptographicHash::Sha256)
-    , m_runningHash(QCryptographicHash::Sha256)
+    , m_keepaliveTimer(new QTimer(this))
+    , m_lastActivity(0)
 {
     if (m_socket) {
         m_socket->setParent(this);
@@ -35,6 +34,11 @@ TransferSession::TransferSession(QTcpSocket* socket, QObject* parent)
         connect(m_socket, &QTcpSocket::disconnected, this, &TransferSession::onDisconnected);
         connect(m_socket, &QTcpSocket::errorOccurred, this, &TransferSession::onSocketError);
     }
+    
+    m_keepaliveTimer->setInterval(15000);
+    connect(m_keepaliveTimer, &QTimer::timeout, this, &TransferSession::onKeepaliveTimer);
+    m_keepaliveTimer->start();
+    m_lastActivity = QDateTime::currentSecsSinceEpoch();
 }
 
 TransferSession::~TransferSession()
@@ -111,6 +115,8 @@ void TransferSession::sendFile(const QString& filePath, const QString& transferI
             QTimer::singleShot(0, this, [this, next]() {
                 sendFile(next.filePath, next.transferId, next.relativePath, next.totalFiles, next.currentFile);
             });
+        } else if (!m_pendingSendFiles.isEmpty()) {
+            QTimer::singleShot(0, this, &TransferSession::sendNextQueuedFile);
         }
         return;
     }
@@ -198,6 +204,7 @@ void TransferSession::cancelTransfer()
     m_pendingSendFiles.clear();
     m_pendingFolderTransferId.clear();
     m_pendingFolderBasePath.clear();
+    m_sendQueue.clear();
     
     if (m_currentFile) {
         m_currentFile->close();
@@ -217,8 +224,8 @@ void TransferSession::cancelTransfer()
 
 void TransferSession::disconnectFromPeer()
 {
-    if (m_socket && m_socket->state() == QAbstractSocket::ConnectedState) {
-        m_socket->disconnectFromHost();
+    if (m_socket && m_socket->state() != QAbstractSocket::UnconnectedState) {
+        m_socket->abort();
     }
 }
 
@@ -295,6 +302,7 @@ void TransferSession::sendNextChunk()
 
 void TransferSession::onReadyRead()
 {
+    m_lastActivity = QDateTime::currentSecsSinceEpoch();
     m_buffer.append(m_socket->readAll());
     if (m_buffer.size() > 50 * 1024 * 1024) { // 50MB max
         emit error(tr("Buffer size exceeded limit"));
@@ -352,6 +360,12 @@ void TransferSession::processMessage(const QByteArray& message)
         handleFileComplete(header);
     } else if (header.type == TransferType::TRANSFER_CANCEL) {
         handleTransferCancel(header);
+    } else if (header.type == TransferType::FOLDER_HEADER) {
+        handleFolderHeader(header);
+    } else if (header.type == TransferType::PING) {
+        handlePing(header);
+    } else if (header.type == TransferType::PONG) {
+        handlePong();
     }
 }
 
@@ -575,6 +589,44 @@ void TransferSession::onSocketError(QAbstractSocket::SocketError socketError)
 {
     Q_UNUSED(socketError)
     emit error(m_socket->errorString());
+}
+
+void TransferSession::handleFolderHeader(const TransferHeader& header)
+{
+    m_totalFiles = header.totalFiles;
+}
+
+void TransferSession::handlePing(const TransferHeader& header)
+{
+    TransferHeader pong;
+    pong.type = TransferType::PONG;
+    pong.transferId = header.transferId;
+    sendHeader(pong);
+}
+
+void TransferSession::handlePong()
+{
+}
+
+void TransferSession::sendPing()
+{
+    TransferHeader ping;
+    ping.type = TransferType::PING;
+    ping.transferId = m_sessionId;
+    sendHeader(ping);
+}
+
+void TransferSession::onKeepaliveTimer()
+{
+    qint64 now = QDateTime::currentSecsSinceEpoch();
+    if (m_lastActivity > 0 && now - m_lastActivity > 45) {
+        emit error(tr("Connection timed out"));
+        disconnectFromPeer();
+        return;
+    }
+    if (m_state == State::Accepted || m_state == State::Transferring) {
+        sendPing();
+    }
 }
 
 } // namespace Witra

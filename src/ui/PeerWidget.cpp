@@ -18,8 +18,6 @@ PeerWidget::PeerWidget(Peer* peer, TransferManager* transferManager, QWidget* pa
     , m_deviceLabel(nullptr)
     , m_statusLabel(nullptr)
     , m_connectButton(nullptr)
-    , m_acceptButton(nullptr)
-    , m_rejectButton(nullptr)
     , m_sendFilesButton(nullptr)
     , m_sendFolderButton(nullptr)
     , m_disconnectButton(nullptr)
@@ -173,37 +171,6 @@ void PeerWidget::applyStyles()
             color: #8B949E;
         }
         
-        #acceptButton {
-            background-color: #238636;
-            border: none;
-            border-radius: 8px;
-            padding: 8px 20px;
-            font-family: 'Segoe UI', sans-serif;
-            font-size: 13px;
-            font-weight: 600;
-            color: white;
-        }
-        
-        #acceptButton:hover {
-            background-color: #2EA043;
-        }
-        
-        #rejectButton {
-            background-color: transparent;
-            border: 1px solid #F85149;
-            border-radius: 8px;
-            padding: 8px 20px;
-            font-family: 'Segoe UI', sans-serif;
-            font-size: 13px;
-            font-weight: 600;
-            color: #F85149;
-        }
-        
-        #rejectButton:hover {
-            background-color: #F85149;
-            color: white;
-        }
-        
         #sendButton {
             background-color: #238636;
             border: none;
@@ -330,14 +297,6 @@ QString PeerWidget::getAvatarColor() const
 void PeerWidget::onConnectClicked()
 {
     m_transferManager->sendConnectionRequest(m_peer);
-}
-
-void PeerWidget::onAcceptClicked()
-{
-}
-
-void PeerWidget::onRejectClicked()
-{
 }
 
 void PeerWidget::onSendFilesClicked()

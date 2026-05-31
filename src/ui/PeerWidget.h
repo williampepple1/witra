@@ -21,8 +21,6 @@ public:
     
 private slots:
     void onConnectClicked();
-    void onAcceptClicked();
-    void onRejectClicked();
     void onSendFilesClicked();
     void onSendFolderClicked();
     void onDisconnectClicked();
@@ -43,8 +41,6 @@ private:
     QLabel* m_statusLabel;
     
     QPushButton* m_connectButton;
-    QPushButton* m_acceptButton;
-    QPushButton* m_rejectButton;
     QPushButton* m_sendFilesButton;
     QPushButton* m_sendFolderButton;
     QPushButton* m_disconnectButton;

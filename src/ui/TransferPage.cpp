@@ -272,6 +272,7 @@ void TransferPage::clearCompleted()
     }
     
     for (const QString& id : toRemove) {
+        onTransferRemoved(id);
         m_transferManager->removeTransfer(id);
     }
 }
