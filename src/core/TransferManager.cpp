@@ -77,8 +77,10 @@ void TransferManager::stop()
 {
     if (!m_running) return;
     
-    for (auto it = m_pendingRequests.begin(); it != m_pendingRequests.end(); ++it) {
-        it.value()->disconnectFromPeer();
+    QStringList pendingIds = m_pendingRequests.keys();
+    for (const QString& id : pendingIds) {
+        TransferSession* session = m_pendingRequests.value(id);
+        if (session) session->disconnectFromPeer();
     }
     m_pendingRequests.clear();
     

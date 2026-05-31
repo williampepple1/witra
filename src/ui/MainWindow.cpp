@@ -368,6 +368,7 @@ void MainWindow::onConnectionRequestReceived(TransferSession* session,
 {
     ConnectionDialog* dialog = new ConnectionDialog(senderName, 
                                                      session->verificationCode(), this);
+    dialog->setAttribute(Qt::WA_DeleteOnClose);
     
     QPointer<TransferSession> weakSession(session);
     

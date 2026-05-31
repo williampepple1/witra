@@ -120,7 +120,6 @@ private:
     // Message parsing
     QByteArray m_buffer;
     qint32 m_expectedSize;
-    bool m_expectingHeader;
     
     // Current receiving file
     QString m_currentTransferId;

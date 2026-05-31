@@ -95,7 +95,11 @@ void FileTransferServer::handleIncomingConnection(qintptr socketDescriptor)
     
     if (QSslSocket::supportsSsl() && !m_sslConfig.isNull()) {
         QSslSocket* sslSocket = new QSslSocket(this);
-        sslSocket->setSocketDescriptor(socketDescriptor);
+        if (!sslSocket->setSocketDescriptor(socketDescriptor)) {
+            emit error(tr("Failed to attach SSL to incoming connection"));
+            delete sslSocket;
+            return;
+        }
         sslSocket->setSslConfiguration(m_sslConfig);
         connect(sslSocket, &QSslSocket::sslErrors, sslSocket, [sslSocket](const QList<QSslError>&) {
             sslSocket->ignoreSslErrors();
@@ -104,7 +108,11 @@ void FileTransferServer::handleIncomingConnection(qintptr socketDescriptor)
         sessionSocket = sslSocket;
     } else {
         sessionSocket = new QTcpSocket(this);
-        sessionSocket->setSocketDescriptor(socketDescriptor);
+        if (!sessionSocket->setSocketDescriptor(socketDescriptor)) {
+            emit error(tr("Failed to attach to incoming connection"));
+            delete sessionSocket;
+            return;
+        }
     }
     
     TransferSession* session = new TransferSession(sessionSocket, this);

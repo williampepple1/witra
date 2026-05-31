@@ -47,8 +47,35 @@ TransferSession* FileTransferClient::connectToPeer(const QHostAddress& address, 
     
     QSslSocket* sslSocket = qobject_cast<QSslSocket*>(socket);
     if (sslSocket) {
-        connect(sslSocket, &QSslSocket::encrypted, this, [this, session]() {
+        bool* downgraded = new bool(false);
+        connect(sslSocket, &QSslSocket::encrypted, this, [this, session, downgraded]() {
+            *downgraded = true;
             emit connected(session);
+        });
+        connect(sslSocket, &QSslSocket::errorOccurred, this,
+                [this, session, downgraded, address, port](QAbstractSocket::SocketError) mutable {
+            if (*downgraded) return;
+            *downgraded = true;
+            session->deleteLater();
+            m_sessions.remove(session->sessionId());
+            
+            QTcpSocket* plain = new QTcpSocket(this);
+            TransferSession* retry = new TransferSession(plain, this);
+            retry->setIsIncoming(false);
+            retry->setDownloadPath(m_downloadPath);
+            retry->setMaxFileSize(m_maxFileSize);
+            m_sessions[retry->sessionId()] = retry;
+            connect(retry, &TransferSession::disconnected, this, &FileTransferClient::onSessionDisconnected);
+            connect(plain, &QTcpSocket::connected, this, [this, retry]() {
+                emit connected(retry);
+            });
+            connect(plain, &QTcpSocket::errorOccurred, this,
+                    [this, retry](QAbstractSocket::SocketError) {
+                emit connectionFailed(retry, retry->socket()->errorString());
+                m_sessions.remove(retry->sessionId());
+                retry->deleteLater();
+            });
+            plain->connectToHost(address.toString(), port);
         });
         connect(sslSocket, &QSslSocket::errorOccurred, this,
                 [this, session](QAbstractSocket::SocketError) {

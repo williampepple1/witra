@@ -15,7 +15,6 @@ TransferSession::TransferSession(QTcpSocket* socket, QObject* parent)
     , m_isIncoming(false)
     , m_state(State::Idle)
     , m_expectedSize(0)
-    , m_expectingHeader(true)
     , m_currentFile(nullptr)
     , m_currentFileSize(0)
     , m_currentBytesReceived(0)
@@ -166,6 +165,11 @@ void TransferSession::sendFolder(const QString& folderPath, const QString& trans
     header.transferId = transferId;
     header.fileName = dir.dirName();
     header.totalFiles = files.size();
+    
+    if (!m_pendingSendFiles.isEmpty()) {
+        emit transferFailed(transferId, tr("A folder transfer is already in progress"));
+        return;
+    }
     
     sendHeader(header);
     
@@ -409,6 +413,38 @@ void TransferSession::handleConnectionReject(const TransferHeader& header)
 
 void TransferSession::handleFileHeader(const TransferHeader& header)
 {
+    // Validate before mutating state
+    if (m_maxFileSize > 0 && header.fileSize > m_maxFileSize) {
+        emit transferFailed(header.transferId,
+                           tr("File exceeds maximum size limit (%1 GB)")
+                           .arg(m_maxFileSize / (1024.0 * 1024.0 * 1024.0), 0, 'f', 1));
+        TransferHeader cancelHeader;
+        cancelHeader.type = TransferType::TRANSFER_CANCEL;
+        cancelHeader.transferId = header.transferId;
+        sendHeader(cancelHeader);
+        return;
+    }
+    
+    QString cleanRelPath = QDir::cleanPath(header.relativePath);
+    QString cleanFileName = QDir::cleanPath(header.fileName);
+    
+    if (cleanRelPath.startsWith("..") || QDir::isAbsolutePath(cleanRelPath) ||
+        cleanFileName.startsWith("..") || QDir::isAbsolutePath(cleanFileName) ||
+        cleanFileName.contains("/")) {
+        emit transferFailed(header.transferId,
+                           tr("Security: invalid file path from peer"));
+        return;
+    }
+    
+    // Clean up previous file if overwritten
+    if (m_currentFile) {
+        emit transferFailed(m_currentTransferId, tr("Transfer aborted by peer"));
+        m_currentFile->close();
+        m_currentFile->remove();
+        delete m_currentFile;
+        m_currentFile = nullptr;
+    }
+    
     m_currentTransferId = header.transferId;
     m_currentFileName = header.fileName;
     m_currentRelativePath = header.relativePath;
@@ -418,17 +454,6 @@ void TransferSession::handleFileHeader(const TransferHeader& header)
     m_currentFileIndex = header.currentFileIndex;
     m_expectedHash = header.fileHash;
     m_runningHash.reset();
-    
-    if (m_maxFileSize > 0 && m_currentFileSize > m_maxFileSize) {
-        emit transferFailed(m_currentTransferId,
-                           tr("File exceeds maximum size limit (%1 GB)")
-                           .arg(m_maxFileSize / (1024.0 * 1024.0 * 1024.0), 0, 'f', 1));
-        TransferHeader cancelHeader;
-        cancelHeader.type = TransferType::TRANSFER_CANCEL;
-        cancelHeader.transferId = m_currentTransferId;
-        sendHeader(cancelHeader);
-        return;
-    }
     
     // Create destination path
     QString destPath = m_downloadPath;
@@ -441,22 +466,9 @@ void TransferSession::handleFileHeader(const TransferHeader& header)
         destDir.mkpath(".");
     }
     
-    // Handle relative path for folders
-    QString cleanRelPath = QDir::cleanPath(m_currentRelativePath);
-    QString cleanFileName = QDir::cleanPath(m_currentFileName);
-    
-    if (cleanRelPath.startsWith("..") || QDir::isAbsolutePath(cleanRelPath) ||
-        cleanFileName.startsWith("..") || QDir::isAbsolutePath(cleanFileName) ||
-        cleanFileName.contains("/")) {
-        emit transferFailed(m_currentTransferId,
-                           tr("Security: invalid file path from peer"));
-        return;
-    }
-    
     QString filePath;
-    QString subDir = ".";
     if (m_currentRelativePath.contains('/')) {
-        subDir = cleanRelPath.left(cleanRelPath.lastIndexOf('/'));
+        QString subDir = cleanRelPath.left(cleanRelPath.lastIndexOf('/'));
         destDir.mkpath(subDir);
         filePath = destDir.absoluteFilePath(cleanRelPath);
     } else {
@@ -473,11 +485,6 @@ void TransferSession::handleFileHeader(const TransferHeader& header)
             newName += "." + fileInfo.suffix();
         }
         filePath = targetDir.absoluteFilePath(newName);
-    }
-    
-    if (m_currentFile) {
-        m_currentFile->close();
-        delete m_currentFile;
     }
     
     m_currentFile = new QFile(filePath + ".part", this);

@@ -109,9 +109,7 @@ void NetworkDiscovery::broadcast(const DiscoveryMessage& message)
     QByteArray data = message.toJson();
     
     for (const QHostAddress& broadcastAddr : getBroadcastAddresses()) {
-        for (int offset = 0; offset < MAX_PORT_RANGE; ++offset) {
-            m_socket->writeDatagram(data, broadcastAddr, DISCOVERY_PORT + offset);
-        }
+        m_socket->writeDatagram(data, broadcastAddr, DISCOVERY_PORT);
     }
 }
 
@@ -135,7 +133,10 @@ void NetworkDiscovery::readPendingDatagrams()
         
         if (msg.type == DiscoveryType::ANNOUNCE) {
             if (m_peerTokens.size() > 1000) {
-                m_peerTokens.clear();
+                auto it = m_peerTokens.begin();
+                for (int i = 0; i < 500 && it != m_peerTokens.end(); ++i) {
+                    it = m_peerTokens.erase(it);
+                }
             }
             m_peerTokens[msg.peerId] = qMakePair(msg.token, datagram.senderAddress());
             
