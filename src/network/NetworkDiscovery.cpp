@@ -127,9 +127,11 @@ void NetworkDiscovery::readPendingDatagrams()
         // Ignore our own broadcasts
         if (msg.peerId == m_peerId) continue;
         
-        // Reject stale messages
-        qint64 now = QDateTime::currentSecsSinceEpoch();
-        if (qAbs(now - msg.timestamp) > DISCOVERY_TIMESTAMP_WINDOW) continue;
+        // Reject stale messages (skip check for legacy clients without timestamp)
+        if (msg.timestamp > 0) {
+            qint64 now = QDateTime::currentSecsSinceEpoch();
+            if (qAbs(now - msg.timestamp) > DISCOVERY_TIMESTAMP_WINDOW) continue;
+        }
         
         if (msg.type == DiscoveryType::ANNOUNCE) {
             if (m_peerTokens.size() > 1000) {
