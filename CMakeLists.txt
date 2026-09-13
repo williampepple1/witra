@@ -9,6 +9,18 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Xcode 26 / macOS 26 SDK dropped AGL. Older Qt FindWrapOpenGL.cmake still
+# hard-codes -framework AGL when it cannot find the library. Pre-create the
+# imported target so that module returns early and never adds AGL.
+if(APPLE AND NOT TARGET WrapOpenGL::WrapOpenGL)
+    add_library(WrapOpenGL::WrapOpenGL INTERFACE IMPORTED)
+    find_library(WITRA_OPENGL_FRAMEWORK OpenGL)
+    if(WITRA_OPENGL_FRAMEWORK)
+        set_property(TARGET WrapOpenGL::WrapOpenGL PROPERTY
+            INTERFACE_LINK_LIBRARIES "${WITRA_OPENGL_FRAMEWORK}")
+    endif()
+endif()
+
 # Find Qt packages
 find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS 
     Core 

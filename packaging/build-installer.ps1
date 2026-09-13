@@ -162,6 +162,9 @@ if ($version) {
     $isccArgs = @("/DMyAppVersion=$version") + $isccArgs
 }
 & $env:ISCC @isccArgs
+if ($LASTEXITCODE -ne 0) {
+    throw "ISCC failed with exit code $LASTEXITCODE"
+}
 
 # --------------------------- 4. Create portable zip --------------------------
 Step '4/4  Creating portable zip'
@@ -176,11 +179,14 @@ $installer = Get-ChildItem (Join-Path $installerDir 'Witra-Setup-*.exe') | Selec
 $portable = Get-ChildItem (Join-Path $installerDir 'Witra-*-portable.zip') | Select-Object -First 1
 
 Write-Host "`n=== Packaging Complete ===" -ForegroundColor Green
-if ($installer) {
-    Write-Host "Installer: $($installer.FullName)"
-    Write-Host ("  Size: {0:N2} MB" -f ($installer.Length / 1MB))
+if (-not $installer) {
+    throw "Inno Setup finished but no Witra-Setup-*.exe was produced in $installerDir"
 }
-if ($portable) {
-    Write-Host "Portable:  $($portable.FullName)"
-    Write-Host ("  Size: {0:N2} MB" -f ($portable.Length / 1MB))
+if (-not $portable) {
+    throw "Portable zip was not produced in $installerDir"
 }
+
+Write-Host "Installer: $($installer.FullName)"
+Write-Host ("  Size: {0:N2} MB" -f ($installer.Length / 1MB))
+Write-Host "Portable:  $($portable.FullName)"
+Write-Host ("  Size: {0:N2} MB" -f ($portable.Length / 1MB))
