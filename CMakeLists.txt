@@ -80,7 +80,9 @@ set(RESOURCES
 # Platform-specific resources
 if(WIN32)
     # Windows resource file (for app icon in taskbar/explorer)
-    set(WIN_RESOURCES resources/app.rc)
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/resources/app.rc")
+        set(WIN_RESOURCES resources/app.rc)
+    endif()
 endif()
 
 if(APPLE)
@@ -144,6 +146,7 @@ endif()
 # Installation
 include(GNUInstallDirs)
 install(TARGETS witra
+    BUNDLE DESTINATION .
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
