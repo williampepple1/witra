@@ -2,6 +2,7 @@
 #include <QDir>
 #include <QDirIterator>
 #include <QFileInfo>
+#include <QRegularExpression>
 #include <QSettings>
 #include <QStandardPaths>
 
@@ -38,7 +39,6 @@ TransferManager::TransferManager(PeerManager* peerManager, QObject* parent)
             this, &TransferManager::error);
     connect(m_server, &FileTransferServer::newConnection,
             this, [this](TransferSession* session) {
-        // M2: Removed duplicate disconnect connection since setupSessionConnections handles it
         setupSessionConnections(session);
     });
     
@@ -91,6 +91,7 @@ void TransferManager::stop()
     }
     
     m_transferSessions.clear();
+    m_wiredSessions.clear();
     m_running = false;
 }
 
@@ -144,7 +145,8 @@ void TransferManager::acceptConnectionRequest(TransferSession* session)
         peer->setState(Peer::ConnectionState::Connected);
         emit connectionAccepted(peer);
     }
-    
+
+    // Incoming sessions are already wired from FileTransferServer::newConnection.
     setupSessionConnections(session);
 }
 
@@ -363,14 +365,21 @@ void TransferManager::onOutgoingConnectionFailed(TransferSession* session, const
 
 void TransferManager::setupSessionConnections(TransferSession* session)
 {
+    if (!session || m_wiredSessions.contains(session)) {
+        return;
+    }
+    m_wiredSessions.insert(session);
+
     connect(session, &TransferSession::transferStarted,
-            this, &TransferManager::onSessionTransferStarted);
+            this, &TransferManager::onSessionTransferStarted, Qt::UniqueConnection);
     connect(session, &TransferSession::transferProgress,
-            this, &TransferManager::onSessionTransferProgress);
+            this, &TransferManager::onSessionTransferProgress, Qt::UniqueConnection);
     connect(session, &TransferSession::transferCompleted,
-            this, &TransferManager::onSessionTransferCompleted);
+            this, &TransferManager::onSessionTransferCompleted, Qt::UniqueConnection);
     connect(session, &TransferSession::transferFailed,
-            this, &TransferManager::onSessionTransferFailed);
+            this, &TransferManager::onSessionTransferFailed, Qt::UniqueConnection);
+    connect(session, &TransferSession::fileReceived,
+            this, &TransferManager::onSessionFileReceived, Qt::UniqueConnection);
     connect(session, &TransferSession::disconnected,
             this, [this, session]() { onSessionDisconnected(session); });
 }
@@ -426,12 +435,36 @@ void TransferManager::onSessionTransferFailed(const QString& transferId,
 void TransferManager::onSessionTransferProgress(const QString& transferId,
                                                  qint64 received, qint64 total)
 {
-    Q_UNUSED(total)
     TransferItem* item = m_transfers.value(transferId, nullptr);
-    if (item) {
-        item->setTransferredSize(received);
-        emit transferUpdated(item);
+    if (!item) return;
+
+    if (total > item->totalSize()) {
+        item->setTotalSize(total);
     }
+    if (item->totalFiles() > 1 && received < item->transferredSize()) {
+        return;
+    }
+    item->setTransferredSize(received);
+    emit transferUpdated(item);
+}
+
+void TransferManager::onSessionFileReceived(const QString& transferId, const QString& filePath)
+{
+    TransferItem* item = m_transfers.value(transferId, nullptr);
+    if (!item || !item->filePath().isEmpty()) return;
+    
+    QString pathToOpen = filePath;
+    if (item->totalFiles() > 1) {
+        QDir downloadDir(m_downloadPath);
+        QString relativePath = downloadDir.relativeFilePath(filePath);
+        QStringList parts = relativePath.split(QRegularExpression("[/\\\\]"), Qt::SkipEmptyParts);
+        if (!parts.isEmpty() && !parts.first().contains("..")) {
+            pathToOpen = downloadDir.absoluteFilePath(parts.first());
+        }
+    }
+    
+    item->setFilePath(QDir::cleanPath(pathToOpen));
+    emit transferUpdated(item);
 }
 
 TransferSession* TransferManager::getOrCreateSession(Peer* peer)
@@ -454,6 +487,8 @@ TransferSession* TransferManager::getOrCreateSession(Peer* peer)
 void TransferManager::onSessionDisconnected(TransferSession* session)
 {
     if (!session) return;
+
+    m_wiredSessions.remove(session);
     
     QString peerId = session->peerId();
     if (!peerId.isEmpty()) {

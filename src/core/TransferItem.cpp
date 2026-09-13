@@ -79,6 +79,13 @@ void TransferItem::setStatus(Status status)
     }
 }
 
+void TransferItem::setTotalSize(qint64 size)
+{
+    if (m_totalSize == size) return;
+    m_totalSize = size;
+    emit progressChanged(progress());
+}
+
 void TransferItem::setTransferredSize(qint64 size)
 {
     m_transferredSize = size;

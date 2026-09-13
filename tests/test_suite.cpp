@@ -12,7 +12,11 @@
 
 #include "core/Peer.h"
 #include "core/PeerManager.h"
+
+#define private public
 #include "core/TransferManager.h"
+#undef private
+
 #include "network/NetworkDiscovery.h"
 #include "network/FileTransferServer.h"
 #include "network/FileTransferClient.h"
@@ -403,6 +407,113 @@ bool testUnauthorizedTransferRejected() {
 }
 
 // -------------------------------------------------------------
+// Test 8: Incoming Received Path Is Stored For Open Folder
+// -------------------------------------------------------------
+bool testIncomingReceivedPathStored() {
+    QString testDir = QDir::cleanPath(QDir::tempPath() + "/witra_received_path_test");
+    QString downloadDir = testDir + "/received";
+    QDir().mkpath(downloadDir);
+    
+    PeerManager peerManager;
+    TransferManager transferManager(&peerManager);
+    transferManager.setDownloadPath(downloadDir);
+    
+    QString transferId = "incoming-file-transfer";
+    TransferItem* item = new TransferItem(
+        transferId, "sample.txt", 5,
+        TransferItem::Direction::Incoming, "peer-1", &transferManager
+    );
+    transferManager.m_transfers[transferId] = item;
+    
+    QString receivedFilePath = downloadDir + "/sample.txt";
+    transferManager.onSessionFileReceived(transferId, receivedFilePath);
+    
+    TEST_ASSERT(item->filePath() == QDir::cleanPath(receivedFilePath),
+                "Incoming single-file transfer should store the received file path");
+    
+    QString folderTransferId = "incoming-folder-transfer";
+    TransferItem* folderItem = new TransferItem(
+        folderTransferId, "photo.jpg", 5,
+        TransferItem::Direction::Incoming, "peer-1", &transferManager
+    );
+    folderItem->setTotalFiles(2);
+    transferManager.m_transfers[folderTransferId] = folderItem;
+    
+    QString nestedFilePath = downloadDir + "/Holiday/photos/photo.jpg";
+    transferManager.onSessionFileReceived(folderTransferId, nestedFilePath);
+    
+    TEST_ASSERT(folderItem->filePath() == QDir::cleanPath(downloadDir + "/Holiday"),
+                "Incoming folder transfer should store the top-level received folder path");
+    
+    QDir(testDir).removeRecursively();
+    return true;
+}
+
+// -------------------------------------------------------------
+// Test 9: Incoming Sessions Are Wired Once
+// -------------------------------------------------------------
+bool testIncomingSessionConnectionsNotDuplicated() {
+    PeerManager unitPm;
+    TransferManager unitManager(&unitPm);
+    auto* dummySocket = new QTcpSocket;
+    TransferSession dummySession(dummySocket, &unitManager);
+    dummySession.setPeerId("peer-dup");
+
+    unitManager.setupSessionConnections(&dummySession);
+    unitManager.setupSessionConnections(&dummySession);
+    TEST_ASSERT(unitManager.m_wiredSessions.size() == 1,
+                "setupSessionConnections must ignore a session that is already wired");
+
+    unitManager.acceptConnectionRequest(&dummySession);
+    TEST_ASSERT(unitManager.m_wiredSessions.size() == 1,
+                "acceptConnectionRequest must not wire incoming session signals a second time");
+
+    return true;
+}
+
+// -------------------------------------------------------------
+// Test 10: Folder Transfer Progress Does Not Reset
+// -------------------------------------------------------------
+bool testFolderTransferProgressAccumulates() {
+    PeerManager pm;
+    TransferManager tm(&pm);
+
+    const QString transferId = "folder-progress-transfer";
+    TransferItem* item = new TransferItem(
+        transferId, "Docs", 300,
+        TransferItem::Direction::Outgoing, "peer-1", &tm
+    );
+    item->setTotalFiles(3);
+    tm.m_transfers[transferId] = item;
+
+    tm.onSessionTransferProgress(transferId, 50, 300);
+    TEST_ASSERT(item->transferredSize() == 50, "First folder progress update should store aggregate bytes");
+
+    tm.onSessionTransferProgress(transferId, 100, 300);
+    TEST_ASSERT(item->transferredSize() == 100, "Folder progress should grow with the first file");
+
+    tm.onSessionTransferProgress(transferId, 30, 100);
+    TEST_ASSERT(item->transferredSize() == 100,
+                "A per-file progress reset must not move folder progress backwards");
+
+    tm.onSessionTransferProgress(transferId, 180, 300);
+    TEST_ASSERT(item->transferredSize() == 180, "Later aggregate folder progress should be stored");
+    TEST_ASSERT(item->progress() > 50.0, "Folder progress percent should reflect completed files plus current file");
+
+    TransferItem* incoming = new TransferItem(
+        "incoming-folder-progress", "Pics", 0,
+        TransferItem::Direction::Incoming, "peer-1", &tm
+    );
+    incoming->setTotalFiles(2);
+    tm.m_transfers["incoming-folder-progress"] = incoming;
+    tm.onSessionTransferProgress("incoming-folder-progress", 40, 200);
+    TEST_ASSERT(incoming->totalSize() == 200, "Incoming folder progress should learn the aggregate total size");
+    TEST_ASSERT(incoming->transferredSize() == 40, "Incoming folder progress should store aggregate bytes");
+
+    return true;
+}
+
+// -------------------------------------------------------------
 // Main Test Runner
 // -------------------------------------------------------------
 int main(int argc, char* argv[]) {
@@ -419,6 +530,9 @@ int main(int argc, char* argv[]) {
     RUN_TEST(testEndToEndFileTransfer);
     RUN_TEST(testFileSizeLimitEnforcement);
     RUN_TEST(testUnauthorizedTransferRejected);
+    RUN_TEST(testIncomingReceivedPathStored);
+    RUN_TEST(testIncomingSessionConnectionsNotDuplicated);
+    RUN_TEST(testFolderTransferProgressAccumulates);
     
     std::cout << "==================================================" << std::endl;
     std::cout << " RESULTS: " << g_testsPassed << "/" << g_testsRun << " Passed ("

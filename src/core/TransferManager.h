@@ -3,6 +3,7 @@
 
 #include <QObject>
 #include <QMap>
+#include <QSet>
 #include "TransferItem.h"
 #include "PeerManager.h"
 #include "network/FileTransferServer.h"
@@ -64,6 +65,7 @@ private slots:
     void onSessionTransferProgress(const QString& transferId, qint64 received, qint64 total);
     void onSessionTransferCompleted(const QString& transferId);
     void onSessionTransferFailed(const QString& transferId, const QString& error);
+    void onSessionFileReceived(const QString& transferId, const QString& filePath);
     
 private:
     void setupSessionConnections(TransferSession* session);
@@ -76,6 +78,7 @@ private:
     QMap<QString, TransferItem*> m_transfers;
     QMap<QString, TransferSession*> m_pendingRequests;
     QMap<QString, TransferSession*> m_transferSessions;
+    QSet<TransferSession*> m_wiredSessions;
     QString m_downloadPath;
     qint64 m_maxFileSize;
     bool m_running;

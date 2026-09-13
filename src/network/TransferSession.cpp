@@ -23,7 +23,10 @@ TransferSession::TransferSession(QTcpSocket* socket, QObject* parent)
     , m_sendFile(nullptr)
     , m_sendTotalSize(0)
     , m_sendBytesSent(0)
+    , m_pendingTotalFiles(0)
     , m_pendingFileIndex(0)
+    , m_folderBytesCompleted(0)
+    , m_folderTotalSize(0)
     , m_keepaliveTimer(new QTimer(this))
     , m_lastActivity(0)
 {
@@ -150,9 +153,12 @@ void TransferSession::sendFolder(const QString& folderPath, const QString& trans
     }
     
     QStringList files;
+    qint64 totalSize = 0;
     QDirIterator it(folderPath, QDir::Files, QDirIterator::Subdirectories);
     while (it.hasNext()) {
-        files.append(it.next());
+        it.next();
+        files.append(it.filePath());
+        totalSize += it.fileInfo().size();
     }
     
     if (files.isEmpty()) {
@@ -160,16 +166,17 @@ void TransferSession::sendFolder(const QString& folderPath, const QString& trans
         return;
     }
     
-    TransferHeader header;
-    header.type = TransferType::FOLDER_HEADER;
-    header.transferId = transferId;
-    header.fileName = dir.dirName();
-    header.totalFiles = files.size();
-    
     if (!m_pendingSendFiles.isEmpty()) {
         emit transferFailed(transferId, tr("A folder transfer is already in progress"));
         return;
     }
+    
+    TransferHeader header;
+    header.type = TransferType::FOLDER_HEADER;
+    header.transferId = transferId;
+    header.fileName = dir.dirName();
+    header.fileSize = totalSize;
+    header.totalFiles = files.size();
     
     sendHeader(header);
     
@@ -178,6 +185,8 @@ void TransferSession::sendFolder(const QString& folderPath, const QString& trans
     m_pendingFolderBasePath = folderPath;
     m_pendingTotalFiles = files.size();
     m_pendingFileIndex = 0;
+    m_folderTotalSize = totalSize;
+    m_folderBytesCompleted = 0;
     
     sendNextQueuedFile();
 }
@@ -209,6 +218,7 @@ void TransferSession::cancelTransfer()
     m_pendingFolderTransferId.clear();
     m_pendingFolderBasePath.clear();
     m_sendQueue.clear();
+    resetFolderProgress();
     
     if (m_currentFile) {
         m_currentFile->close();
@@ -265,9 +275,16 @@ void TransferSession::sendNextChunk()
         header.fileHash = m_sendHash.result();
         sendHeader(header);
         
+        const qint64 finishedFileSize = m_sendTotalSize;
+        const QString finishedTransferId = m_sendTransferId;
+        
         m_sendFile->close();
         delete m_sendFile;
         m_sendFile = nullptr;
+        
+        if (isFolderTransfer()) {
+            m_folderBytesCompleted += finishedFileSize;
+        }
         
         if (!m_sendQueue.isEmpty()) {
             QueuedFile next = m_sendQueue.dequeue();
@@ -280,8 +297,9 @@ void TransferSession::sendNextChunk()
             return;
         }
         
-        emit transferCompleted(m_sendTransferId);
+        emit transferCompleted(finishedTransferId);
         m_state = State::Completed;
+        resetFolderProgress();
         return;
     }
     
@@ -289,7 +307,7 @@ void TransferSession::sendNextChunk()
     m_sendBytesSent += chunk.size();
     m_sendHash.addData(chunk);
     
-    emit transferProgress(m_sendTransferId, m_sendBytesSent, m_sendTotalSize);
+    emitFolderAwareProgress(m_sendTransferId, m_sendBytesSent, m_sendTotalSize);
     
     if (m_socket->bytesToWrite() > 1024 * 1024) { // 1MB
         auto connection = std::make_shared<QMetaObject::Connection>();
@@ -517,8 +535,18 @@ void TransferSession::handleFileHeader(const TransferHeader& header)
     }
     
     m_state = State::Transferring;
-    emit transferStarted(m_currentTransferId, m_currentFileName, 
-                        m_currentFileSize, m_totalFiles);
+    if (m_totalFiles > 1) {
+        if (m_folderTotalSize <= 0) {
+            m_folderTotalSize += m_currentFileSize;
+            if (header.currentFileIndex <= 1) {
+                emit transferStarted(m_currentTransferId, header.fileName,
+                                    m_folderTotalSize, m_totalFiles);
+            }
+        }
+    } else {
+        emit transferStarted(m_currentTransferId, m_currentFileName,
+                            m_currentFileSize, m_totalFiles);
+    }
 }
 
 void TransferSession::handleFileData(const QByteArray& data)
@@ -540,7 +568,7 @@ void TransferSession::handleFileData(const QByteArray& data)
     m_currentBytesReceived += data.size();
     m_runningHash.addData(data);
     
-    emit transferProgress(m_currentTransferId, m_currentBytesReceived, m_currentFileSize);
+    emitFolderAwareProgress(m_currentTransferId, m_currentBytesReceived, m_currentFileSize);
 }
 
 void TransferSession::handleFileComplete(const TransferHeader& header)
@@ -586,10 +614,15 @@ void TransferSession::handleFileComplete(const TransferHeader& header)
         }
         
         emit fileReceived(m_currentTransferId, finalPath);
+
+        if (isFolderTransfer()) {
+            m_folderBytesCompleted += m_currentFileSize;
+        }
         
         if (m_currentFileIndex >= m_totalFiles) {
             emit transferCompleted(m_currentTransferId);
             m_state = State::Completed;
+            resetFolderProgress();
         }
     }
 }
@@ -605,6 +638,7 @@ void TransferSession::handleTransferCancel(const TransferHeader& header)
     
     emit transferFailed(header.transferId, tr("Transfer cancelled by peer"));
     m_state = State::Idle;
+    resetFolderProgress();
 }
 
 void TransferSession::onDisconnected()
@@ -620,7 +654,44 @@ void TransferSession::onSocketError(QAbstractSocket::SocketError socketError)
 
 void TransferSession::handleFolderHeader(const TransferHeader& header)
 {
+    m_currentTransferId = header.transferId;
+    m_currentFileName = header.fileName;
     m_totalFiles = header.totalFiles;
+    m_currentFileIndex = 0;
+    m_folderTotalSize = header.fileSize > 0 ? header.fileSize : 0;
+    m_folderBytesCompleted = 0;
+    m_state = State::Transferring;
+    emit transferStarted(header.transferId, header.fileName,
+                        m_folderTotalSize, header.totalFiles);
+}
+
+bool TransferSession::isFolderTransfer() const
+{
+    return m_folderTotalSize > 0 ||
+           m_pendingTotalFiles > 1 ||
+           m_totalFiles > 1 ||
+           !m_pendingFolderTransferId.isEmpty();
+}
+
+void TransferSession::resetFolderProgress()
+{
+    m_folderBytesCompleted = 0;
+    m_folderTotalSize = 0;
+    m_pendingTotalFiles = 0;
+    m_pendingFolderTransferId.clear();
+    m_pendingFolderBasePath.clear();
+}
+
+void TransferSession::emitFolderAwareProgress(const QString& transferId, qint64 fileBytes, qint64 fileTotal)
+{
+    if (isFolderTransfer()) {
+        const qint64 total = m_folderTotalSize > 0
+            ? m_folderTotalSize
+            : (m_folderBytesCompleted + fileTotal);
+        emit transferProgress(transferId, m_folderBytesCompleted + fileBytes, total);
+        return;
+    }
+    emit transferProgress(transferId, fileBytes, fileTotal);
 }
 
 void TransferSession::handlePing(const TransferHeader& header)

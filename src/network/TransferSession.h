@@ -107,6 +107,9 @@ private:
     
     void sendHeader(const TransferHeader& header);
     void writeMessage(const QByteArray& data, bool isHeader = true);
+    void emitFolderAwareProgress(const QString& transferId, qint64 fileBytes, qint64 fileTotal);
+    void resetFolderProgress();
+    bool isFolderTransfer() const;
     
     QTcpSocket* m_socket;
     QString m_sessionId;
@@ -156,6 +159,8 @@ private:
     QString m_pendingFolderBasePath;
     qint64 m_pendingTotalFiles;
     qint64 m_pendingFileIndex;
+    qint64 m_folderBytesCompleted;
+    qint64 m_folderTotalSize;
     
     // Keepalive
     QTimer* m_keepaliveTimer;

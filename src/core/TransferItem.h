@@ -52,6 +52,7 @@ public:
     void setFilePath(const QString& path) { m_filePath = path; }
     void setPeerName(const QString& name) { m_peerName = name; }
     void setStatus(Status status);
+    void setTotalSize(qint64 size);
     void setTransferredSize(qint64 size);
     void addTransferredBytes(qint64 bytes);
     void setTotalFiles(qint64 total) { m_totalFiles = total; }
