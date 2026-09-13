@@ -23,9 +23,11 @@ AppUpdatesURL={#MyAppURL}
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
-; Resolve resource/dist paths from the repo root, not packaging/
+; SourceDir is the repo root. OutputDir is relative to SourceDir,
+; so use build\installer (not ..\build\installer, which writes
+; outside the repo on CI: D:\a\witra\build\...).
 SourceDir=..
-OutputDir=..\build\installer
+OutputDir=build\installer
 OutputBaseFilename=Witra-Setup-{#MyAppVersion}
 SetupIconFile=resources\icons\app.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
