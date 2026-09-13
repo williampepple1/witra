@@ -6,6 +6,7 @@
 #include <QSslSocket>
 #include <QMap>
 #include "TransferSession.h"
+#include "TlsIdentity.h"
 
 namespace Witra {
 
@@ -16,7 +17,9 @@ public:
     explicit FileTransferClient(QObject* parent = nullptr);
     ~FileTransferClient();
     
-    TransferSession* connectToPeer(const QHostAddress& address, quint16 port);
+    TransferSession* connectToPeer(const QHostAddress& address, quint16 port,
+                                  const QString& expectedPeerId = QString());
+    void setTlsIdentity(TlsIdentity* identity);
     TransferSession* session(const QString& sessionId) const;
     TransferSession* sessionByPeerId(const QString& peerId) const;
     QList<TransferSession*> sessions() const { return m_sessions.values(); }
@@ -34,9 +37,12 @@ private slots:
     void onSessionDisconnected();
     
 private:
+    TlsIdentity* identity() const;
+
     QMap<QString, TransferSession*> m_sessions;
     QString m_downloadPath;
     qint64 m_maxFileSize;
+    TlsIdentity* m_identity;
 };
 
 } // namespace Witra

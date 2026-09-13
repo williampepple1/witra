@@ -22,6 +22,7 @@
 #include "network/FileTransferClient.h"
 #include "network/TransferSession.h"
 #include "network/Protocol.h"
+#include "network/TlsIdentity.h"
 
 using namespace Witra;
 
@@ -147,11 +148,48 @@ bool testNetworkDiscovery() {
     return true;
 }
 
+struct TestTlsPair {
+    QString dir;
+    TlsIdentity alice;
+    TlsIdentity bob;
+
+    TestTlsPair()
+        : dir(QDir::cleanPath(QDir::tempPath() + "/witra_tls_" + QUuid::createUuid().toString(QUuid::WithoutBraces)))
+        , alice(dir + "/alice")
+        , bob(dir + "/bob")
+    {
+        QDir().mkpath(dir + "/alice");
+        QDir().mkpath(dir + "/bob");
+    }
+
+    ~TestTlsPair() {
+        QDir(dir).removeRecursively();
+    }
+
+    bool apply(FileTransferServer& server, FileTransferClient& client) {
+        if (!alice.ensure() || !bob.ensure()) {
+            return false;
+        }
+        server.setTlsIdentity(&alice);
+        client.setTlsIdentity(&bob);
+        return true;
+    }
+};
+
 // -------------------------------------------------------------
 // Test 4: Live TLS Connection, Handshake & Pairing Code
 // -------------------------------------------------------------
 bool testLiveTlsConnection() {
+    TestTlsPair tls;
     FileTransferServer server;
+    FileTransferClient client;
+    TEST_ASSERT(tls.apply(server, client), "Must generate distinct TLS identities");
+    TEST_ASSERT(tls.alice.fingerprintSha256() != tls.bob.fingerprintSha256(),
+                "Each device identity must have a unique certificate");
+    TEST_ASSERT(TlsIdentity::pairingCode(tls.alice.certificate(), tls.bob.certificate())
+                    == TlsIdentity::pairingCode(tls.bob.certificate(), tls.alice.certificate()),
+                "Pairing code must be commutative over the two certificates");
+
     bool started = server.start(45679);
     if (!started) {
         started = server.start(45680);
@@ -168,14 +206,13 @@ bool testLiveTlsConnection() {
         session->sendConnectionAccept();
     });
     
-    FileTransferClient client;
     bool clientConnected = false;
     TransferSession* clientSession = nullptr;
     
     QObject::connect(&client, &FileTransferClient::connected, [&](TransferSession* session) {
         clientConnected = true;
         clientSession = session;
-        session->sendConnectionRequest("TestClient", "client-123");
+        session->sendConnectionRequest("TestClient", "client-live-tls");
     });
     
     TransferSession* initialSession = client.connectToPeer(QHostAddress("127.0.0.1"), port);
@@ -223,7 +260,10 @@ bool testEndToEndFileTransfer() {
     QByteArray expectedHash = QCryptographicHash::hash(payload, QCryptographicHash::Sha256).toHex();
     
     // Setup server
+    TestTlsPair tls;
     FileTransferServer server;
+    FileTransferClient client;
+    TEST_ASSERT(tls.apply(server, client), "Must create TLS identities for transfer test");
     server.setDownloadPath(downloadDir);
     TEST_ASSERT(server.start(45681), "Server must start");
     
@@ -234,8 +274,6 @@ bool testEndToEndFileTransfer() {
         session->sendConnectionAccept();
     });
     
-    // Setup client
-    FileTransferClient client;
     TransferSession* clientSession = nullptr;
     QObject::connect(&client, &FileTransferClient::connected, [&](TransferSession* session) {
         clientSession = session;
@@ -292,7 +330,10 @@ bool testEndToEndFileTransfer() {
 // Test 6: File Size Limit Enforcement (M1)
 // -------------------------------------------------------------
 bool testFileSizeLimitEnforcement() {
+    TestTlsPair tls;
     FileTransferServer server;
+    FileTransferClient client;
+    TEST_ASSERT(tls.apply(server, client), "Must create TLS identities for size-limit test");
     // Set 100 KB limit
     server.setMaxFileSize(100 * 1024);
     TEST_ASSERT(server.start(45682), "Server must start");
@@ -304,7 +345,6 @@ bool testFileSizeLimitEnforcement() {
         session->sendConnectionAccept();
     });
     
-    FileTransferClient client;
     TransferSession* clientSession = nullptr;
     QObject::connect(&client, &FileTransferClient::connected, [&](TransferSession* session) {
         clientSession = session;
@@ -359,7 +399,10 @@ bool testUnauthorizedTransferRejected() {
     sourceFile.write("hello");
     sourceFile.close();
     
+    TestTlsPair tls;
     FileTransferServer server;
+    FileTransferClient client;
+    TEST_ASSERT(tls.apply(server, client), "Must create TLS identities for unauthorized-transfer test");
     server.setDownloadPath(downloadDir);
     TEST_ASSERT(server.start(45683), "Server must start");
     
@@ -379,7 +422,6 @@ bool testUnauthorizedTransferRejected() {
         });
     });
     
-    FileTransferClient client;
     TransferSession* clientSession = nullptr;
     QObject::connect(&client, &FileTransferClient::connected, [&](TransferSession* session) {
         clientSession = session;
@@ -403,6 +445,48 @@ bool testUnauthorizedTransferRejected() {
     
     server.stop();
     QDir(testDir).removeRecursively();
+    return true;
+}
+
+// -------------------------------------------------------------
+// Test 7b: Pinned Certificate Mismatch Is Rejected
+// -------------------------------------------------------------
+bool testPinnedCertificateMismatchRejected() {
+    CertificatePinStore::clear("impersonated-peer");
+    CertificatePinStore::pin("impersonated-peer", QByteArray(32, '\x01'));
+
+    TestTlsPair tls;
+    FileTransferServer server;
+    FileTransferClient client;
+    TEST_ASSERT(tls.apply(server, client), "Must create TLS identities for pin-mismatch test");
+    TEST_ASSERT(server.start(45684), "Server must start");
+
+    bool rejected = false;
+    QObject::connect(&server, &FileTransferServer::newConnection, [&](TransferSession* session) {
+        QObject::connect(session, &TransferSession::error, [&](const QString& message) {
+            if (message.contains("pinned", Qt::CaseInsensitive)
+                || message.contains("mismatch", Qt::CaseInsensitive)) {
+                rejected = true;
+            }
+        });
+    });
+    QObject::connect(&client, &FileTransferClient::connectionFailed, [&](TransferSession*, const QString&) {
+        rejected = true;
+    });
+
+    TransferSession* clientSession = nullptr;
+    QObject::connect(&client, &FileTransferClient::connected, [&](TransferSession* session) {
+        clientSession = session;
+        session->sendConnectionRequest("Imposter", "impersonated-peer");
+    });
+
+    client.connectToPeer(QHostAddress("127.0.0.1"), server.port(), "impersonated-peer");
+
+    TEST_ASSERT(waitForCondition([&]() { return rejected; }, 5000),
+                "A pinned peer ID with a different certificate must be rejected");
+
+    CertificatePinStore::clear("impersonated-peer");
+    server.stop();
     return true;
 }
 
@@ -522,6 +606,9 @@ int main(int argc, char* argv[]) {
     std::cerr << "test_witra starting..." << std::endl;
 
     QCoreApplication app(argc, argv);
+    app.setOrganizationName("Witra");
+    app.setApplicationName("WitraTests");
+    CertificatePinStore::clearAll();
     
     std::cout << "==================================================" << std::endl;
     std::cout << "       WITRA AUTOMATED VERIFICATION SUITE         " << std::endl;
@@ -534,6 +621,7 @@ int main(int argc, char* argv[]) {
     RUN_TEST(testEndToEndFileTransfer);
     RUN_TEST(testFileSizeLimitEnforcement);
     RUN_TEST(testUnauthorizedTransferRejected);
+    RUN_TEST(testPinnedCertificateMismatchRejected);
     RUN_TEST(testIncomingReceivedPathStored);
     RUN_TEST(testIncomingSessionConnectionsNotDuplicated);
     RUN_TEST(testFolderTransferProgressAccumulates);

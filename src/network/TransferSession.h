@@ -4,6 +4,7 @@
 #include <QObject>
 #include <QTcpSocket>
 #include <QSslSocket>
+#include <QSslCertificate>
 #include <QSslConfiguration>
 #include <QFile>
 #include <QDataStream>
@@ -104,6 +105,9 @@ private:
     void sendPing();
     bool canProcessTransferMessage() const;
     QString generateVerificationCode() const;
+    QSslCertificate peerTlsCertificate() const;
+    void pinPeerCertificate();
+    bool peerCertificateMatchesPin() const;
     
     void sendHeader(const TransferHeader& header);
     void writeMessage(const QByteArray& data, bool isHeader = true);

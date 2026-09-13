@@ -44,6 +44,7 @@ set(SOURCES
     src/network/FileTransferServer.cpp
     src/network/FileTransferClient.cpp
     src/network/TransferSession.cpp
+    src/network/TlsIdentity.cpp
     
     # Core
     src/core/PeerManager.cpp
@@ -68,6 +69,7 @@ set(HEADERS
     src/network/FileTransferClient.h
     src/network/TransferSession.h
     src/network/Protocol.h
+    src/network/TlsIdentity.h
     
     # Core
     src/core/PeerManager.h
@@ -152,7 +154,7 @@ target_include_directories(witra PRIVATE
 
 # Windows-specific settings
 if(WIN32)
-    target_link_libraries(witra PRIVATE ws2_32 iphlpapi)
+    target_link_libraries(witra PRIVATE ws2_32 iphlpapi crypt32)
 endif()
 
 # Installation
@@ -170,6 +172,7 @@ add_executable(test_witra
     src/network/FileTransferServer.cpp
     src/network/FileTransferClient.cpp
     src/network/TransferSession.cpp
+    src/network/TlsIdentity.cpp
     src/core/PeerManager.cpp
     src/core/TransferManager.cpp
     src/core/Peer.cpp
@@ -189,7 +192,7 @@ target_include_directories(test_witra PRIVATE
 )
 
 if(WIN32)
-    target_link_libraries(test_witra PRIVATE ws2_32 iphlpapi)
+    target_link_libraries(test_witra PRIVATE ws2_32 iphlpapi crypt32)
     set_target_properties(test_witra PROPERTIES WIN32_EXECUTABLE FALSE)
 endif()
 

@@ -1,4 +1,5 @@
 #include "TransferSession.h"
+#include "TlsIdentity.h"
 #include <QDir>
 #include <QDirIterator>
 #include <QFileInfo>
@@ -63,6 +64,11 @@ QHostAddress TransferSession::peerAddress() const
 void TransferSession::sendConnectionRequest(const QString& senderName, const QString& senderId)
 {
     m_verificationCode = generateVerificationCode();
+    if (qobject_cast<QSslSocket*>(m_socket) && m_verificationCode.isEmpty()) {
+        emit error(tr("TLS peer certificate is missing"));
+        disconnectFromPeer();
+        return;
+    }
     
     TransferHeader header;
     header.type = TransferType::CONNECTION_REQUEST;
@@ -76,6 +82,8 @@ void TransferSession::sendConnectionRequest(const QString& senderName, const QSt
 
 void TransferSession::sendConnectionAccept()
 {
+    pinPeerCertificate();
+
     TransferHeader header;
     header.type = TransferType::CONNECTION_ACCEPT;
     
@@ -416,21 +424,78 @@ void TransferSession::handleConnectionRequest(const TransferHeader& header)
     m_peerName = header.senderName.left(MAX_DISPLAY_NAME_LENGTH);
     m_peerId = header.transferId;
     m_isIncoming = true;
-    m_verificationCode = header.verificationCode;
+
+    if (!peerCertificateMatchesPin()) {
+        emit error(tr("Peer certificate does not match the pinned identity"));
+        disconnectFromPeer();
+        return;
+    }
+
+    m_verificationCode = generateVerificationCode();
+    if (qobject_cast<QSslSocket*>(m_socket)) {
+        if (m_verificationCode.isEmpty()) {
+            emit error(tr("TLS peer certificate is missing"));
+            disconnectFromPeer();
+            return;
+        }
+        if (!header.verificationCode.isEmpty() && header.verificationCode != m_verificationCode) {
+            emit error(tr("TLS pairing code mismatch"));
+            disconnectFromPeer();
+            return;
+        }
+    } else if (!header.verificationCode.isEmpty()) {
+        m_verificationCode = header.verificationCode;
+    }
+
     emit connectionRequestReceived(m_peerName, header.transferId);
 }
 
 void TransferSession::handleConnectionAccept(const TransferHeader& header)
 {
     Q_UNUSED(header)
+    if (!peerCertificateMatchesPin()) {
+        emit error(tr("Peer certificate does not match the pinned identity"));
+        disconnectFromPeer();
+        return;
+    }
+    pinPeerCertificate();
     m_state = State::Accepted;
     emit connectionAccepted();
 }
 
 QString TransferSession::generateVerificationCode() const
 {
+    auto* ssl = qobject_cast<QSslSocket*>(m_socket);
+    if (ssl) {
+        return TlsIdentity::pairingCode(ssl->localCertificate(), ssl->peerCertificate());
+    }
     int code = QRandomGenerator::global()->bounded(0, 1000000);
     return QString::number(code).rightJustified(6, '0');
+}
+
+QSslCertificate TransferSession::peerTlsCertificate() const
+{
+    auto* ssl = qobject_cast<QSslSocket*>(m_socket);
+    return ssl ? ssl->peerCertificate() : QSslCertificate();
+}
+
+void TransferSession::pinPeerCertificate()
+{
+    if (m_peerId.isEmpty()) {
+        return;
+    }
+    const QByteArray fingerprint = TlsIdentity::fingerprintOf(peerTlsCertificate());
+    if (!fingerprint.isEmpty()) {
+        CertificatePinStore::pin(m_peerId, fingerprint);
+    }
+}
+
+bool TransferSession::peerCertificateMatchesPin() const
+{
+    if (m_peerId.isEmpty() || !CertificatePinStore::hasPin(m_peerId)) {
+        return true;
+    }
+    return CertificatePinStore::matches(m_peerId, TlsIdentity::fingerprintOf(peerTlsCertificate()));
 }
 
 void TransferSession::startServerEncryption(const QSslConfiguration& config)

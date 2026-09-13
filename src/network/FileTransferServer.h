@@ -7,6 +7,7 @@
 #include <QSslConfiguration>
 #include <QMap>
 #include "TransferSession.h"
+#include "TlsIdentity.h"
 
 namespace Witra {
 
@@ -38,6 +39,7 @@ public:
     
     void setDownloadPath(const QString& path) { m_downloadPath = path; }
     void setMaxFileSize(qint64 size) { m_maxFileSize = size; }
+    void setTlsIdentity(TlsIdentity* identity);
     QString downloadPath() const { return m_downloadPath; }
     QSslConfiguration sslConfiguration() const { return m_sslConfig; }
     
@@ -55,11 +57,14 @@ private slots:
     void onSessionDisconnected();
     
 private:
+    void applyIdentity();
+
     CustomTcpServer* m_server;
     QMap<QString, TransferSession*> m_sessions;
     QString m_downloadPath;
     qint64 m_maxFileSize;
     QSslConfiguration m_sslConfig;
+    TlsIdentity* m_identity;
 };
 
 } // namespace Witra

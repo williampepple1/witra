@@ -124,7 +124,7 @@ void TransferManager::sendConnectionRequest(Peer* peer)
 {
     if (!peer || peer->state() != Peer::ConnectionState::Discovered) return;
     
-    TransferSession* session = m_client->connectToPeer(peer->address(), peer->port());
+    TransferSession* session = m_client->connectToPeer(peer->address(), peer->port(), peer->id());
     if (session) {
         session->setPeerId(peer->id());
         session->setPeerName(peer->displayName());

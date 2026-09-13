@@ -6,6 +6,7 @@ namespace Witra {
 FileTransferClient::FileTransferClient(QObject* parent)
     : QObject(parent)
     , m_maxFileSize(MAX_FILE_SIZE)
+    , m_identity(nullptr)
 {
     m_downloadPath = QDir::homePath() + "/Downloads/Witra";
 }
@@ -19,34 +20,56 @@ FileTransferClient::~FileTransferClient()
     m_sessions.clear();
 }
 
-TransferSession* FileTransferClient::connectToPeer(const QHostAddress& address, quint16 port)
+void FileTransferClient::setTlsIdentity(TlsIdentity* identity)
+{
+    m_identity = identity;
+}
+
+TlsIdentity* FileTransferClient::identity() const
+{
+    return m_identity ? m_identity : &TlsIdentity::application();
+}
+
+TransferSession* FileTransferClient::connectToPeer(const QHostAddress& address, quint16 port,
+                                                   const QString& expectedPeerId)
 {
     QTcpSocket* socket = nullptr;
-    
-    if (QSslSocket::supportsSsl()) {
+    TlsIdentity* tls = identity();
+    const bool useTls = QSslSocket::supportsSsl() && tls->ensure();
+
+    if (useTls) {
         QSslSocket* ssl = new QSslSocket(this);
-        ssl->setPeerVerifyMode(QSslSocket::VerifyNone);
-        ssl->setProtocol(QSsl::TlsV1_2OrLater);
-        connect(ssl, &QSslSocket::sslErrors, ssl, [ssl](const QList<QSslError>&) {
-            ssl->ignoreSslErrors();
-        });
+        ssl->setSslConfiguration(tls->socketConfiguration());
         socket = ssl;
     } else {
         socket = new QTcpSocket(this);
     }
-    
+
     TransferSession* session = new TransferSession(socket, this);
     session->setIsIncoming(false);
     session->setDownloadPath(m_downloadPath);
     session->setMaxFileSize(m_maxFileSize);
-    
+    if (!expectedPeerId.isEmpty()) {
+        session->setPeerId(expectedPeerId);
+    }
+
     m_sessions[session->sessionId()] = session;
-    
+
     connect(session, &TransferSession::disconnected,
             this, &FileTransferClient::onSessionDisconnected);
-    
+
     QSslSocket* sslSocket = qobject_cast<QSslSocket*>(socket);
     if (sslSocket) {
+        connect(sslSocket, &QSslSocket::sslErrors, this,
+                [this, sslSocket, session, expectedPeerId](const QList<QSslError>& errors) {
+            QString reason;
+            if (TlsIdentity::evaluateHandshake(sslSocket, expectedPeerId, errors, &reason)) {
+                sslSocket->ignoreSslErrors();
+            } else {
+                emit connectionFailed(session, reason);
+                sslSocket->abort();
+            }
+        });
         connect(sslSocket, &QSslSocket::encrypted, this, [this, session]() {
             emit connected(session);
         });
@@ -67,9 +90,9 @@ TransferSession* FileTransferClient::connectToPeer(const QHostAddress& address, 
             m_sessions.remove(session->sessionId());
             session->deleteLater();
         });
-        socket->connectToHost(address.toString(), port);
+        socket->connectToHost(address, port);
     }
-    
+
     return session;
 }
 

@@ -1,8 +1,5 @@
 #include "FileTransferServer.h"
 #include <QDir>
-#include <QFile>
-#include <QSslCertificate>
-#include <QSslKey>
 
 namespace Witra {
 
@@ -10,26 +7,12 @@ FileTransferServer::FileTransferServer(QObject* parent)
     : QObject(parent)
     , m_server(new CustomTcpServer(this))
     , m_maxFileSize(MAX_FILE_SIZE)
+    , m_identity(nullptr)
 {
-    QFile certFile(":/certs/cert.pem");
-    QFile keyFile(":/certs/key.pem");
-    
-    if (certFile.open(QIODevice::ReadOnly) && keyFile.open(QIODevice::ReadOnly)) {
-        QSslCertificate cert(&certFile, QSsl::Pem);
-        QSslKey key(&keyFile, QSsl::Rsa, QSsl::Pem);
-        
-        if (!cert.isNull() && !key.isNull()) {
-            m_sslConfig.setLocalCertificate(cert);
-            m_sslConfig.setPrivateKey(key);
-            m_sslConfig.setPeerVerifyMode(QSslSocket::VerifyNone);
-            m_sslConfig.setProtocol(QSsl::TlsV1_2OrLater);
-        }
-    }
-    
     m_downloadPath = QDir::homePath() + "/Downloads/Witra";
     QDir().mkpath(m_downloadPath);
-    
-    connect(m_server, &CustomTcpServer::incomingSocketDescriptor, 
+
+    connect(m_server, &CustomTcpServer::incomingSocketDescriptor,
             this, &FileTransferServer::handleIncomingConnection);
 }
 
@@ -38,17 +21,35 @@ FileTransferServer::~FileTransferServer()
     stop();
 }
 
+void FileTransferServer::setTlsIdentity(TlsIdentity* identity)
+{
+    m_identity = identity;
+    applyIdentity();
+}
+
+void FileTransferServer::applyIdentity()
+{
+    TlsIdentity* identity = m_identity ? m_identity : &TlsIdentity::application();
+    if (!identity->ensure()) {
+        m_sslConfig = QSslConfiguration();
+        return;
+    }
+    m_sslConfig = identity->socketConfiguration();
+}
+
 bool FileTransferServer::start(quint16 port)
 {
     if (m_server->isListening()) return true;
-    
+
+    applyIdentity();
+
     for (int offset = 0; offset < MAX_PORT_RANGE; ++offset) {
         quint16 tryPort = port + offset;
         if (m_server->listen(QHostAddress::AnyIPv4, tryPort)) {
             return true;
         }
     }
-    
+
     emit error(tr("Failed to start server on ports %1-%2: %3")
                .arg(port).arg(port + MAX_PORT_RANGE - 1)
                .arg(m_server->errorString()));
@@ -58,7 +59,7 @@ bool FileTransferServer::start(quint16 port)
 void FileTransferServer::stop()
 {
     m_server->close();
-    
+
     for (TransferSession* session : m_sessions.values()) {
         session->disconnectFromPeer();
         session->deleteLater();
@@ -90,10 +91,10 @@ void FileTransferServer::handleIncomingConnection(qintptr socketDescriptor)
         emit error(tr("Connection rejected: maximum connections (%1) reached").arg(MAX_CONNECTIONS));
         return;
     }
-    
+
     QTcpSocket* sessionSocket = nullptr;
-    
-    if (QSslSocket::supportsSsl() && !m_sslConfig.isNull()) {
+
+    if (QSslSocket::supportsSsl() && !m_sslConfig.localCertificate().isNull()) {
         QSslSocket* sslSocket = new QSslSocket(this);
         if (!sslSocket->setSocketDescriptor(socketDescriptor)) {
             emit error(tr("Failed to attach SSL to incoming connection"));
@@ -101,8 +102,14 @@ void FileTransferServer::handleIncomingConnection(qintptr socketDescriptor)
             return;
         }
         sslSocket->setSslConfiguration(m_sslConfig);
-        connect(sslSocket, &QSslSocket::sslErrors, sslSocket, [sslSocket](const QList<QSslError>&) {
-            sslSocket->ignoreSslErrors();
+        connect(sslSocket, &QSslSocket::sslErrors, this, [this, sslSocket](const QList<QSslError>& errors) {
+            QString reason;
+            if (TlsIdentity::evaluateHandshake(sslSocket, QString(), errors, &reason)) {
+                sslSocket->ignoreSslErrors();
+            } else {
+                emit error(tr("Rejected unauthenticated TLS peer: %1").arg(reason));
+                sslSocket->abort();
+            }
         });
         sslSocket->startServerEncryption();
         sessionSocket = sslSocket;
@@ -114,22 +121,22 @@ void FileTransferServer::handleIncomingConnection(qintptr socketDescriptor)
             return;
         }
     }
-    
+
     TransferSession* session = new TransferSession(sessionSocket, this);
     session->setIsIncoming(true);
     session->setDownloadPath(m_downloadPath);
     session->setMaxFileSize(m_maxFileSize);
-    
+
     m_sessions[session->sessionId()] = session;
-    
+
     connect(session, &TransferSession::disconnected,
             this, &FileTransferServer::onSessionDisconnected);
-    
+
     connect(session, &TransferSession::connectionRequestReceived,
             this, [this, session](const QString& senderName, const QString&) {
         emit connectionRequestReceived(session, senderName);
     });
-    
+
     emit newConnection(session);
 }
 
