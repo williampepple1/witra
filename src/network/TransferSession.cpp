@@ -343,6 +343,11 @@ void TransferSession::onReadyRead()
             processMessage(messageData);
         } else {
             // Data message (file chunk)
+            if (!canProcessTransferMessage()) {
+                emit error(tr("Rejected file data before connection was accepted"));
+                disconnectFromPeer();
+                return;
+            }
             handleFileData(messageData);
         }
     }
@@ -359,12 +364,27 @@ void TransferSession::processMessage(const QByteArray& message)
     } else if (header.type == TransferType::CONNECTION_REJECT) {
         handleConnectionReject(header);
     } else if (header.type == TransferType::FILE_HEADER) {
+        if (!canProcessTransferMessage()) {
+            emit error(tr("Rejected file transfer before connection was accepted"));
+            disconnectFromPeer();
+            return;
+        }
         handleFileHeader(header);
     } else if (header.type == TransferType::FILE_COMPLETE) {
+        if (!canProcessTransferMessage()) {
+            emit error(tr("Rejected file transfer before connection was accepted"));
+            disconnectFromPeer();
+            return;
+        }
         handleFileComplete(header);
     } else if (header.type == TransferType::TRANSFER_CANCEL) {
         handleTransferCancel(header);
     } else if (header.type == TransferType::FOLDER_HEADER) {
+        if (!canProcessTransferMessage()) {
+            emit error(tr("Rejected folder transfer before connection was accepted"));
+            disconnectFromPeer();
+            return;
+        }
         handleFolderHeader(header);
     } else if (header.type == TransferType::PING) {
         handlePing(header);
@@ -613,6 +633,13 @@ void TransferSession::handlePing(const TransferHeader& header)
 
 void TransferSession::handlePong()
 {
+}
+
+bool TransferSession::canProcessTransferMessage() const
+{
+    return m_state == State::Accepted ||
+           m_state == State::Transferring ||
+           m_state == State::Completed;
 }
 
 void TransferSession::sendPing()

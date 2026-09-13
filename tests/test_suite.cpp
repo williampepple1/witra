@@ -342,6 +342,67 @@ bool testFileSizeLimitEnforcement() {
 }
 
 // -------------------------------------------------------------
+// Test 7: File Transfer Requires Accepted Connection
+// -------------------------------------------------------------
+bool testUnauthorizedTransferRejected() {
+    QString testDir = QDir::cleanPath(QDir::tempPath() + "/witra_unauthorized_test");
+    QString downloadDir = testDir + "/received";
+    QDir().mkpath(downloadDir);
+    
+    QString sourceFilePath = testDir + "/unauthorized.txt";
+    QFile sourceFile(sourceFilePath);
+    TEST_ASSERT(sourceFile.open(QIODevice::WriteOnly), "Must be able to create unauthorized source file");
+    sourceFile.write("hello");
+    sourceFile.close();
+    
+    FileTransferServer server;
+    server.setDownloadPath(downloadDir);
+    TEST_ASSERT(server.start(45683), "Server must start");
+    
+    TransferSession* serverSession = nullptr;
+    bool rejectedUnauthorizedTransfer = false;
+    bool transferStarted = false;
+    
+    QObject::connect(&server, &FileTransferServer::newConnection,
+                     [&](TransferSession* session) {
+        serverSession = session;
+        QObject::connect(session, &TransferSession::error, [&](const QString&) {
+            rejectedUnauthorizedTransfer = true;
+        });
+        QObject::connect(session, &TransferSession::transferStarted,
+                         [&](const QString&, const QString&, qint64, qint64) {
+            transferStarted = true;
+        });
+    });
+    
+    FileTransferClient client;
+    TransferSession* clientSession = nullptr;
+    QObject::connect(&client, &FileTransferClient::connected, [&](TransferSession* session) {
+        clientSession = session;
+        session->sendFile(sourceFilePath, "unauthorized-transfer");
+    });
+    
+    client.connectToPeer(QHostAddress("127.0.0.1"), server.port());
+    
+    TEST_ASSERT(waitForCondition([&]() { return clientSession != nullptr; }, 3000),
+                "Witra client must connect without sending a connection request");
+    TEST_ASSERT(waitForCondition([&]() { return serverSession != nullptr; }, 3000),
+                "Server must create a session for unauthorized Witra client");
+    
+    TEST_ASSERT(waitForCondition([&]() { return rejectedUnauthorizedTransfer; }, 3000),
+                "Server must reject file headers before connection acceptance");
+    TEST_ASSERT(!transferStarted, "Unauthorized file header must not start a transfer");
+    TEST_ASSERT(!QFile::exists(downloadDir + "/unauthorized.txt.part"),
+                "Unauthorized transfer must not create a partial file");
+    TEST_ASSERT(!QFile::exists(downloadDir + "/unauthorized.txt"),
+                "Unauthorized transfer must not create a final file");
+    
+    server.stop();
+    QDir(testDir).removeRecursively();
+    return true;
+}
+
+// -------------------------------------------------------------
 // Main Test Runner
 // -------------------------------------------------------------
 int main(int argc, char* argv[]) {
@@ -357,6 +418,7 @@ int main(int argc, char* argv[]) {
     RUN_TEST(testLiveTlsConnection);
     RUN_TEST(testEndToEndFileTransfer);
     RUN_TEST(testFileSizeLimitEnforcement);
+    RUN_TEST(testUnauthorizedTransferRejected);
     
     std::cout << "==================================================" << std::endl;
     std::cout << " RESULTS: " << g_testsPassed << "/" << g_testsRun << " Passed ("

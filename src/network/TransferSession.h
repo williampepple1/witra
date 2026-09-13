@@ -102,6 +102,7 @@ private:
     void handlePing(const TransferHeader& header);
     void handlePong();
     void sendPing();
+    bool canProcessTransferMessage() const;
     QString generateVerificationCode() const;
     
     void sendHeader(const TransferHeader& header);
