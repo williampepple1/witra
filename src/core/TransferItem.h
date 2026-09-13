@@ -29,18 +29,19 @@ public:
     explicit TransferItem(QObject* parent = nullptr);
     TransferItem(const QString& id, const QString& fileName, qint64 totalSize,
                  Direction direction, const QString& peerId, QObject* parent = nullptr);
+    Q_DISABLE_COPY(TransferItem)
     
     // Getters
-    QString id() const { return m_id; }
-    QString fileName() const { return m_fileName; }
-    QString filePath() const { return m_filePath; }
+    const QString& id() const { return m_id; }
+    const QString& fileName() const { return m_fileName; }
+    const QString& filePath() const { return m_filePath; }
     qint64 totalSize() const { return m_totalSize; }
     qint64 transferredSize() const { return m_transferredSize; }
     Direction direction() const { return m_direction; }
     Status status() const { return m_status; }
-    QString peerId() const { return m_peerId; }
-    QString peerName() const { return m_peerName; }
-    QDateTime startTime() const { return m_startTime; }
+    const QString& peerId() const { return m_peerId; }
+    const QString& peerName() const { return m_peerName; }
+    const QDateTime& startTime() const { return m_startTime; }
     double progress() const;
     QString speedString() const;
     QString statusString() const;
@@ -57,7 +58,7 @@ public:
     void setCurrentFile(qint64 current) { m_currentFile = current; }
     void setErrorMessage(const QString& error) { m_errorMessage = error; }
     
-    QString errorMessage() const { return m_errorMessage; }
+    const QString& errorMessage() const { return m_errorMessage; }
     
 signals:
     void progressChanged(double progress);

@@ -1,0 +1,215 @@
+name: CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+    tags: [ 'v*' ]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'LICENSE*'
+      - '.gitignore'
+      - '.gitattributes'
+      - '.editorconfig'
+  pull_request:
+    branches: [ main, master ]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'LICENSE*'
+      - '.gitignore'
+      - '.gitattributes'
+      - '.editorconfig'
+
+jobs:
+  build-windows:
+    name: Windows MinGW Build
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Qt 6
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.7.3'
+          host: 'windows'
+          target: 'desktop'
+          arch: 'win64_mingw'
+          tools: 'tools_mingw90'
+
+      - name: Prefer Qt MinGW over runner GCC
+        shell: pwsh
+        run: |
+          $roots = @(
+            $env:IQTA_TOOLS,
+            (Join-Path $env:RUNNER_WORKSPACE 'Qt\Tools'),
+            (Join-Path $env:QT_ROOT_DIR '..\..\Tools')
+          ) | Where-Object { $_ -and (Test-Path $_) }
+          $gxx = Get-ChildItem -Path $roots -Recurse -Filter 'g++.exe' -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match 'mingw' } |
+            Select-Object -First 1
+          if (-not $gxx) { throw 'Qt MinGW g++.exe not found after install-qt-action.' }
+          $bin = $gxx.DirectoryName
+          "MINGW_BIN=$bin" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          $bin | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+          Write-Host "Using MinGW at $bin"
+          & (Join-Path $bin 'g++.exe') --version
+
+      - name: Set up Ninja
+        uses: ashutoshvarma/setup-ninja@master
+        with:
+          version: 1.11.1
+
+      - name: Configure CMake
+        shell: pwsh
+        run: |
+          cmake -S . -B build -G Ninja `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_PREFIX_PATH="$env:Qt6_DIR" `
+            -DCMAKE_C_COMPILER="$env:MINGW_BIN/gcc.exe" `
+            -DCMAKE_CXX_COMPILER="$env:MINGW_BIN/g++.exe" `
+            "-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
+
+      - name: Build
+        shell: pwsh
+        run: cmake --build build --config Release -j
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup -y --no-progress
+
+      - name: Run Packaging Pipeline
+        shell: pwsh
+        run: |
+          if (-not $env:QT_DIR -and $env:QT_ROOT_DIR) { $env:QT_DIR = $env:QT_ROOT_DIR }
+          if ($env:GITHUB_REF -match '^refs/tags/v(.+)$') { $env:WITRA_VERSION = $Matches[1] }
+          packaging\build-installer.ps1
+
+      - name: Upload Windows Installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: Witra-Windows-Setup
+          path: build/installer/Witra-Setup-*.exe
+          if-no-files-found: error
+
+      - name: Upload Windows Portable
+        uses: actions/upload-artifact@v4
+        with:
+          name: Witra-Windows-Portable
+          path: build/installer/Witra-*-portable.zip
+          if-no-files-found: error
+
+  build-macos:
+    name: macOS Clang Build
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Qt 6
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.7.3'
+          host: 'mac'
+          target: 'desktop'
+          arch: 'clang_64'
+
+      - name: Set up Ninja
+        uses: ashutoshvarma/setup-ninja@master
+        with:
+          version: 1.11.1
+
+      - name: Configure CMake
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="$Qt6_DIR" \
+            -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+
+      - name: Build
+        run: cmake --build build --config Release -j
+
+      - name: Package disk image
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            export WITRA_VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          bash packaging/macdeploy.sh build
+
+      - name: Upload macOS disk image
+        uses: actions/upload-artifact@v4
+        with:
+          name: Witra-macOS
+          path: build/dmg/Witra-*-macOS.dmg
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: [build-windows, build-macos]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download Windows installer
+        uses: actions/download-artifact@v4
+        with:
+          name: Witra-Windows-Setup
+          path: dist
+
+      - name: Download Windows portable
+        uses: actions/download-artifact@v4
+        with:
+          name: Witra-Windows-Portable
+          path: dist
+
+      - name: Download macOS disk image
+        uses: actions/download-artifact@v4
+        with:
+          name: Witra-macOS
+          path: dist
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          files=(dist/Witra-Setup-*.exe dist/Witra-*-portable.zip dist/*.dmg)
+          if [[ ${#files[@]} -eq 0 ]]; then
+            echo "No release files found under dist/" >&2
+            exit 1
+          fi
+          printf 'Publishing:\n'
+          printf '  %s\n' "${files[@]}"
+
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            extra=()
+            [[ "$GITHUB_REF_NAME" == *-* ]] && extra+=(--prerelease)
+            gh release create "$GITHUB_REF_NAME" "${files[@]}" \
+              --title "$GITHUB_REF_NAME" \
+              --target "$GITHUB_SHA" \
+              --generate-notes \
+              "${extra[@]}"
+          else
+            notes="Installers from \`${GITHUB_SHA:0:7}\` on ${GITHUB_REF_NAME} (Windows + macOS)."
+            if gh release view latest >/dev/null 2>&1; then
+              gh release upload latest "${files[@]}" --clobber
+              gh release edit latest \
+                --title "Latest" \
+                --target "$GITHUB_SHA" \
+                --notes "$notes" \
+                --latest
+            else
+              gh release create latest "${files[@]}" \
+                --title "Latest" \
+                --target "$GITHUB_SHA" \
+                --notes "$notes" \
+                --latest
+            fi
+          fi

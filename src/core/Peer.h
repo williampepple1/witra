@@ -24,15 +24,16 @@ public:
     explicit Peer(QObject* parent = nullptr);
     Peer(const QString& id, const QString& displayName, const QHostAddress& address, 
          quint16 port, QObject* parent = nullptr);
+    Q_DISABLE_COPY(Peer)
     
     // Getters
-    QString id() const { return m_id; }
-    QString displayName() const { return m_displayName; }
-    QString deviceName() const { return m_deviceName; }
-    QHostAddress address() const { return m_address; }
+    const QString& id() const { return m_id; }
+    const QString& displayName() const { return m_displayName; }
+    const QString& deviceName() const { return m_deviceName; }
+    const QHostAddress& address() const { return m_address; }
     quint16 port() const { return m_port; }
     ConnectionState state() const { return m_state; }
-    QDateTime lastSeen() const { return m_lastSeen; }
+    const QDateTime& lastSeen() const { return m_lastSeen; }
     
     // Setters
     void setDisplayName(const QString& name) { m_displayName = name; }
