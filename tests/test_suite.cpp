@@ -1,4 +1,4 @@
-#include <QApplication>
+#include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -517,7 +517,11 @@ bool testFolderTransferProgressAccumulates() {
 // Main Test Runner
 // -------------------------------------------------------------
 int main(int argc, char* argv[]) {
-    QApplication app(argc, argv);
+    std::cout.setf(std::ios::unitbuf);
+    std::cerr.setf(std::ios::unitbuf);
+    std::cerr << "test_witra starting..." << std::endl;
+
+    QCoreApplication app(argc, argv);
     
     std::cout << "==================================================" << std::endl;
     std::cout << "       WITRA AUTOMATED VERIFICATION SUITE         " << std::endl;

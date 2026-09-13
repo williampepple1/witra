@@ -190,5 +190,45 @@ target_include_directories(test_witra PRIVATE
 
 if(WIN32)
     target_link_libraries(test_witra PRIVATE ws2_32 iphlpapi)
+    set_target_properties(test_witra PROPERTIES WIN32_EXECUTABLE FALSE)
+endif()
+
+enable_testing()
+
+set(_witra_qt_bin "")
+if(DEFINED Qt${QT_VERSION_MAJOR}_DIR)
+    get_filename_component(_witra_qt_prefix "${Qt${QT_VERSION_MAJOR}_DIR}/../../.." ABSOLUTE)
+    if(EXISTS "${_witra_qt_prefix}/bin")
+        set(_witra_qt_bin "${_witra_qt_prefix}/bin")
+    endif()
+endif()
+get_filename_component(_witra_compiler_bin "${CMAKE_CXX_COMPILER}" DIRECTORY)
+
+set(_witra_test_path "${_witra_qt_bin}")
+if(_witra_compiler_bin)
+    if(_witra_test_path)
+        set(_witra_test_path "${_witra_compiler_bin};${_witra_test_path}")
+    else()
+        set(_witra_test_path "${_witra_compiler_bin}")
+    endif()
+endif()
+
+add_test(NAME witra_suite COMMAND test_witra)
+if(_witra_test_path)
+    set(_witra_ctest_path "${_witra_test_path};$ENV{PATH}")
+    string(REPLACE ";" "\\;" _witra_ctest_path "${_witra_ctest_path}")
+    set_tests_properties(witra_suite PROPERTIES
+        ENVIRONMENT "PATH=${_witra_ctest_path}"
+    )
+endif()
+
+if(WIN32 AND _witra_test_path)
+    set(WITRA_TEST_PATH_PREFIX "${_witra_test_path}")
+    set(WITRA_TEST_EXE_NAME "test_witra.exe")
+    configure_file(
+        ${CMAKE_CURRENT_SOURCE_DIR}/tests/run-tests.bat.in
+        ${CMAKE_CURRENT_BINARY_DIR}/run-tests.bat
+        @ONLY
+    )
 endif()
 

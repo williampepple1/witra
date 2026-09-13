@@ -1,0 +1,10 @@
+@echo off
+REM Generated next to test_witra so the suite can load Qt without a silent crash.
+set "PATH=@WITRA_TEST_PATH_PREFIX@;%PATH%"
+cd /d "%~dp0"
+echo test_witra starting...
+"%~dp0@WITRA_TEST_EXE_NAME@"
+set "EXITCODE=%ERRORLEVEL%"
+echo.
+echo test_witra exited with code %EXITCODE%
+exit /b %EXITCODE%
